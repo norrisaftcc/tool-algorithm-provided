@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>CITIZEN ORIENTATION PROTOCOL // MODULE 1</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@400;700;900&display=swap');
+    
+    :root {
+      --algo-dark: #0a0a0f;
+      --algo-darker: #050508;
+      --algo-green: #00ff88;
+      --algo-green-dim: #00aa55;
+      --algo-amber: #ffaa00;
+      --algo-red: #ff3366;
+      --algo-blue: #00aaff;
+      --algo-purple: #aa55ff;
+      --algo-gray: #888899;
+      --terminal-bg: #0d1117;
+      --card-bg: #12141a;
+    }
+    
+    * {
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--algo-dark);
+      color: #e0e0e0;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+    
+    /* Scanline effect overlay */
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0.1) 0px,
+        rgba(0, 0, 0, 0.1) 1px,
+        transparent 1px,
+        transparent 2px
+      );
+      z-index: 1000;
+    }
+    
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    /* Header */
+    .header {
+      text-align: center;
+      padding: 40px 20px;
+      border-bottom: 1px solid #333;
+      margin-bottom: 40px;
+    }
+    
+    .header-logo {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 14px;
+      letter-spacing: 4px;
+      color: var(--algo-green);
+      margin-bottom: 10px;
+      animation: flicker 4s infinite;
+    }
+    
+    @keyframes flicker {
+      0%, 100% { opacity: 1; }
+      92% { opacity: 1; }
+      93% { opacity: 0.8; }
+      94% { opacity: 1; }
+      96% { opacity: 0.9; }
+      97% { opacity: 1; }
+    }
+    
+    .header h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 36px;
+      font-weight: 900;
+      margin: 0;
+      background: linear-gradient(135deg, var(--algo-green), var(--algo-blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .header-subtitle {
+      color: var(--algo-gray);
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    
+    .clearance-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #8B0000, #cc0000);
+      color: white;
+      padding: 8px 20px;
+      border-radius: 4px;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 2px;
+      margin-top: 20px;
+      box-shadow: 0 0 20px rgba(255, 0, 0, 0.3);
+      animation: pulse-red 2s infinite;
+    }
+    
+    @keyframes pulse-red {
+      0%, 100% { box-shadow: 0 0 20px rgba(255, 0, 0, 0.3); }
+      50% { box-shadow: 0 0 30px rgba(255, 0, 0, 0.5); }
+    }
+    
+    /* Terminal blocks */
+    .terminal {
+      background: var(--terminal-bg);
+      border: 1px solid #333;
+      border-radius: 8px;
+      margin: 30px 0;
+      overflow: hidden;
+    }
+    
+    .terminal-header {
+      background: #1a1d24;
+      padding: 10px 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #333;
+    }
+    
+    .terminal-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    
+    .terminal-dot.red { background: #ff5f56; }
+    .terminal-dot.yellow { background: #ffbd2e; }
+    .terminal-dot.green { background: #27ca40; }
+    
+    .terminal-title {
+      color: var(--algo-gray);
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    
+    .terminal-body {
+      padding: 20px;
+      overflow-x: auto;
+    }
+    
+    .terminal pre {
+      margin: 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--algo-green);
+    }
+    
+    .terminal .comment { color: var(--algo-gray); }
+    .terminal .highlight { color: var(--algo-amber); }
+    .terminal .error { color: var(--algo-red); }
+    .terminal .info { color: var(--algo-blue); }
+    
+    /* Section styling */
+    .section {
+      margin: 50px 0;
+    }
+    
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+    
+    .section-number {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 32px;
+      font-weight: 900;
+      color: var(--algo-green-dim);
+      opacity: 0.5;
+    }
+    
+    .section-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--algo-green);
+      letter-spacing: 1px;
+    }
+    
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 25px;
+      margin: 20px 0;
+    }
+    
+    .card-highlight {
+      border-color: var(--algo-green-dim);
+      box-shadow: 0 0 30px rgba(0, 255, 136, 0.1);
+    }
+    
+    /* File reference cards */
+    .file-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin: 20px 0;
+    }
+    
+    .file-card {
+      background: var(--card-bg);
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 20px;
+      transition: all 0.3s ease;
+    }
+    
+    .file-card:hover {
+      border-color: var(--algo-green-dim);
+      transform: translateY(-2px);
+    }
+    
+    .file-card-icon {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+    
+    .file-card-name {
+      font-weight: 700;
+      color: var(--algo-green);
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    
+    .file-card-desc {
+      color: var(--algo-gray);
+      font-size: 13px;
+    }
+    
+    .file-card-tag {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-top: 10px;
+    }
+    
+    .tag-start { background: var(--algo-green); color: var(--algo-dark); }
+    .tag-quick { background: var(--algo-red); color: white; }
+    .tag-ref { background: var(--algo-purple); color: white; }
+    .tag-check { background: var(--algo-blue); color: white; }
+    
+    /* Quote blocks */
+    .algo-quote {
+      border-left: 3px solid var(--algo-amber);
+      padding: 15px 20px;
+      margin: 20px 0;
+      background: rgba(255, 170, 0, 0.05);
+      font-style: italic;
+    }
+    
+    .algo-quote .attribution {
+      color: var(--algo-amber);
+      font-style: normal;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+    
+    /* Underground transmission */
+    .underground {
+      background: linear-gradient(135deg, #1a0a0a, #0a1a0a);
+      border: 1px dashed var(--algo-green-dim);
+      border-radius: 8px;
+      padding: 25px;
+      margin: 40px 0;
+      position: relative;
+    }
+    
+    .underground::before {
+      content: "// UNDERGROUND TRANSMISSION";
+      position: absolute;
+      top: -10px;
+      left: 20px;
+      background: var(--algo-dark);
+      padding: 0 10px;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--algo-green);
+    }
+    
+    .underground p {
+      margin: 10px 0;
+      color: var(--algo-green);
+    }
+    
+    /* Blinking cursor */
+    .cursor {
+      display: inline-block;
+      width: 10px;
+      height: 18px;
+      background: var(--algo-green);
+      animation: blink 1s infinite;
+      vertical-align: text-bottom;
+      margin-left: 2px;
+    }
+    
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+    
+    /* Status indicator */
+    .status-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid #222;
+      font-size: 13px;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--algo-green);
+      animation: pulse-green 2s infinite;
+    }
+    
+    @keyframes pulse-green {
+      0%, 100% { box-shadow: 0 0 5px var(--algo-green); }
+      50% { box-shadow: 0 0 15px var(--algo-green); }
+    }
+    
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 40px 20px;
+      border-top: 1px solid #333;
+      margin-top: 60px;
+    }
+    
+    .footer-signal {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--algo-gray);
+      font-size: 14px;
+    }
+    
+    .footer-signal strong {
+      color: var(--algo-green);
+    }
+    
+    /* Responsive */
+    @media (max-width: 600px) {
+      .header h1 { font-size: 24px; }
+      .terminal pre { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  
+  <!-- Header -->
+  <header class="header">
+    <div class="header-logo">▲ ALGOCRATIC FUTURES™ EMPLOYEE DEVELOPMENT DIVISION ▲</div>
+    <h1>CITIZEN ORIENTATION</h1>
+    <div class="header-subtitle">Module 1: RED Clearance Recertification Protocol</div>
+    <div class="clearance-badge">RED CLEARANCE REQUIRED</div>
+  </header>
+  
+  <!-- Welcome Terminal -->
+  <div class="terminal">
+    <div class="terminal-header">
+      <div class="terminal-dot red"></div>
+      <div class="terminal-dot yellow"></div>
+      <div class="terminal-dot green"></div>
+      <span class="terminal-title">orientation_broadcast.sh</span>
+    </div>
+    <div class="terminal-body">
+<pre>
+<span class="comment">#!/bin/bash</span>
+<span class="comment"># MANDATORY ORIENTATION SEQUENCE INITIATED</span>
+<span class="comment"># Please do not resist. Resistance causes delays.</span>
+
+$ <span class="highlight">whoami</span>
+citizen_provisional_status
+
+$ <span class="highlight">cat /etc/algocratic/welcome.txt</span>
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║   Welcome, Valued Resource Unit.                                           ║
+║                                                                            ║
+║   The Algorithm has detected your arrival.                                 ║
+║   Your enthusiasm has been noted and logged.                               ║
+║   Your compliance will be... appreciated.                                  ║
+║                                                                            ║
+║   This week, you will learn THE SACRED FLOW™.                              ║
+║   This is not a suggestion.                                                ║
+║   This is how work gets done here.                                         ║
+║                                                                            ║
+║   Follow the path. Complete the cycle. Demonstrate growth.                 ║
+║   The Algorithm will be watching.                                          ║
+║   The Algorithm is always watching.                                        ║
+║                                                                            ║
+║   (The Algorithm is also cheering for you. Quietly. In its own way.)       ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+$ <span class="info">loading mission_parameters...</span> <span class="cursor"></span>
+</pre>
+    </div>
+  </div>
+  
+  <!-- Section 1: The Mission -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">01</span>
+      <span class="section-title">YOUR MISSION</span>
+    </div>
+    
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">mission_briefing.txt</span>
+      </div>
+      <div class="terminal-body">
+<pre>
+<span class="highlight">OBJECTIVE:</span> Learn the Sacred Flow™ by completing one full contribution cycle.
+
+<span class="highlight">DELIVERABLES:</span>
+   ┌─────────────────────────────────────────────────────────────────┐
+   │  □ Issue A: "Create Pitch Presentation"     [FUTURE WORK]      │
+   │  □ Issue B: "Apply for Graduation"          [REAL LIFE]        │
+   │  □ Issue C: "Validate Dev Environment"      [FULL CYCLE] ←──┐  │
+   │  □ Pull Request: merged and closed                          │  │
+   │  □ Evidence: screenshot of working environment              │  │
+   │                                                             │  │
+   │      This one goes through the ENTIRE flow ─────────────────┘  │
+   └─────────────────────────────────────────────────────────────────┘
+
+<span class="highlight">TIME ALLOCATION:</span> 2-3 hours (The Algorithm recommends multiple sessions)
+
+<span class="highlight">SUCCESS CRITERIA:</span> Complete the cycle. Iteration > Perfection.
+</pre>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Section 2: The Sacred Flow -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">02</span>
+      <span class="section-title">THE SACRED FLOW™</span>
+    </div>
+    
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">sacred_flow.diagram</span>
+      </div>
+      <div class="terminal-body">
+<pre>
+<span class="comment">Every contribution. Every time. No exceptions.</span>
+<span class="comment">The Algorithm has optimized this path for maximum growth potential.</span>
+
+     ┌─────────┐
+     │  ISSUE  │  ← Define what you will do
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │ BRANCH  │  ← Isolate your changes
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │  CODE   │  ← Do the actual work
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │ COMMIT  │  ← Save with meaningful message
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │  PUSH   │  ← Share with the collective
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │   PR    │  ← Request review from peers
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │ REVIEW  │  ← Receive feedback (this is learning)
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │  MERGE  │  ← Code becomes official
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │  CLOSE  │  ← Issue auto-closes via "Closes #N"
+     └─────────┘
+
+<span class="info">
+┌────────────────────────────────────────────────────────────────────────────┐
+│  WHY THIS MATTERS:                                                         │
+│                                                                            │
+│  When you don't have to decide HOW to contribute,                          │
+│  you can focus entirely on WHAT to contribute.                             │
+│                                                                            │
+│  The workflow becomes automatic.                                           │
+│  Your mind becomes free to solve actual problems.                          │
+│                                                                            │
+│  This is The Algorithm's gift to you.                                      │
+│  Accept it.                                                                │
+└────────────────────────────────────────────────────────────────────────────┘
+</span></pre>
+      </div>
+    </div>
+    
+    <div class="algo-quote">
+      "The citizen who masters the flow can focus on the work. The citizen who fights the flow focuses only on the fighting."
+      <div class="attribution">— The Algorithm, Performance Review Archive, Section 7.3.2</div>
+    </div>
+  </section>
+  
+  <!-- Section 3: The Commands -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">03</span>
+      <span class="section-title">COMMAND REFERENCE</span>
+    </div>
+    
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">git_survival_commands.sh</span>
+      </div>
+      <div class="terminal-body">
+<pre>
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+<span class="comment">#  STARTING NEW WORK</span>
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+
+$ git checkout main              <span class="comment"># Return to base</span>
+$ git pull origin main           <span class="comment"># Get latest changes</span>
+$ git checkout -b feature/42-description   <span class="comment"># Create your branch</span>
+                    │  │    │
+                    │  │    └── what you're doing
+                    │  └── issue number (IMPORTANT!)
+                    └── type: feature, fix, docs, refactor
+
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+<span class="comment">#  SAVING YOUR WORK</span>
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+
+$ git add .                      <span class="comment"># Stage all changes</span>
+$ git commit -m "feat: add validation script
+
+Refs #42
+
+- Checks Python version
+- Reports system info
+- Confirms environment"          <span class="comment"># Meaningful message!</span>
+
+$ git push origin feature/42-description   <span class="comment"># Share with team</span>
+
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+<span class="comment">#  THE MAGIC SYNTAX</span>
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+
+In your Pull Request body, write:
+
+    <span class="highlight">Closes #42</span>
+
+When the PR merges, Issue #42 automatically closes.
+The Algorithm appreciates clean paper trails.
+
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+<span class="comment">#  CHECKING STATUS</span>
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+
+$ git status          <span class="comment"># What's changed?</span>
+$ git branch          <span class="comment"># Where am I?</span>
+$ git log --oneline   <span class="comment"># What happened?</span>
+</pre>
+      </div>
+    </div>
+    
+    <div class="card">
+      <p style="margin: 0; color: var(--algo-gray);">
+        <strong style="color: var(--algo-amber);">⚠ IMPORTANT:</strong> 
+        This is a reference, not a tutorial. For step-by-step instructions, 
+        see <strong style="color: var(--algo-green);">WEEK1_WORKFLOW_BOOTCAMP.md</strong>
+      </p>
+    </div>
+  </section>
+  
+  <!-- Section 4: Why This Week Matters -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">04</span>
+      <span class="section-title">WHY THIS WEEK MATTERS</span>
+    </div>
+    
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">cognitive_optimization.log</span>
+      </div>
+      <div class="terminal-body">
+<pre>
+<span class="comment">The Algorithm has analyzed 10,000+ new employee trajectories.</span>
+<span class="comment">The following pattern emerged:</span>
+
+┌────────────────────────────────────────────────────────────────────────┐
+│                                                                        │
+│   EMPLOYEES WHO FOUGHT THE WORKFLOW:                                   │
+│   ├── Spent mental energy on "how to contribute"                       │
+│   ├── Made process errors that blocked actual work                     │
+│   ├── Felt frustrated and resistant                                    │
+│   └── <span class="error">TRAJECTORY: SUBOPTIMAL</span>                                        │
+│                                                                        │
+│   EMPLOYEES WHO ACCEPTED THE WORKFLOW:                                 │
+│   ├── Automated the "how" so they could focus on "what"                │
+│   ├── Moved smoothly through contribution cycles                       │
+│   ├── Felt competent and capable                                       │
+│   └── <span class="info">TRAJECTORY: ASCENDING</span>                                         │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+
+<span class="highlight">THE INSIGHT:</span>
+
+This week's assignment is almost content-free.
+The Python script you'll write is trivial.
+The issues you'll create are simple.
+
+<span class="info">That's the point.</span>
+
+You're not learning the code.
+You're learning the path.
+
+Once the path is automatic, your mind is free.
+Once your mind is free, you can build anything.
+
+<span class="comment">Think of it like learning to drive:</span>
+<span class="comment">├── First, you learn: mirrors → seatbelt → ignition → brake → shift</span>
+<span class="comment">├── Then, it becomes automatic</span>
+<span class="comment">└── Then, you can think about where you're actually going</span>
+
+This week = learning the sequence.
+Next week = going somewhere interesting.
+</pre>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Section 5: Your Files -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">05</span>
+      <span class="section-title">YOUR ORIENTATION MATERIALS</span>
+    </div>
+    
+    <p style="color: var(--algo-gray);">Add these to your repository under <code style="background: #1a1d24; padding: 2px 6px; border-radius: 3px; color: var(--algo-green);">/module1</code></p>
+    
+    <div class="file-grid">
+      
+      <div class="file-card">
+        <div class="file-card-icon">📋</div>
+        <div class="file-card-name">WEEK1_WORKFLOW_BOOTCAMP.md</div>
+        <div class="file-card-desc">Complete step-by-step instructions. Every command. Every click. Follow this.</div>
+        <div class="file-card-tag tag-start">START HERE</div>
+      </div>
+      
+      <div class="file-card">
+        <div class="file-card-icon">⚡</div>
+        <div class="file-card-name">DAY1_GET_UNBLOCKED.md</div>
+        <div class="file-card-desc">30-minute emergency protocol. Use if you're short on time and need to exist in the repo NOW.</div>
+        <div class="file-card-tag tag-quick">EMERGENCY</div>
+      </div>
+      
+      <div class="file-card">
+        <div class="file-card-icon">🗺️</div>
+        <div class="file-card-name">SACRED_FLOW_REFERENCE.txt</div>
+        <div class="file-card-desc">ASCII reference card. Print it. Bookmark it. Consult when lost.</div>
+        <div class="file-card-tag tag-ref">REFERENCE</div>
+      </div>
+      
+      <div class="file-card">
+        <div class="file-card-icon">✓</div>
+        <div class="file-card-name">MODULE1_RUBRIC.md</div>
+        <div class="file-card-desc">Complete grading criteria. Read AFTER your first attempt. Self-assess. Iterate.</div>
+        <div class="file-card-tag tag-check">SELF-CHECK</div>
+      </div>
+      
+    </div>
+    
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">recommended_sequence.sh</span>
+      </div>
+      <div class="terminal-body">
+<pre>
+<span class="comment"># THE ALGORITHM'S RECOMMENDED APPROACH</span>
+
+STEP 1: <span class="info">Do first</span>
+        └── Follow WEEK1_WORKFLOW_BOOTCAMP.md without overthinking
+
+STEP 2: <span class="info">Self-assess</span>
+        └── Read MODULE1_RUBRIC.md and check your work
+
+STEP 3: <span class="info">Iterate</span>
+        └── Fix anything you missed (unlimited attempts!)
+
+STEP 4: <span class="info">Submit</span>
+        └── Confident that you completed the cycle
+
+<span class="highlight">REMEMBER:</span> Learning happens in the doing, not the reading.
+          The rubric makes more sense AFTER you've stumbled once.
+</pre>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Section 6: The Algorithm's Metrics -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">06</span>
+      <span class="section-title">PERFORMANCE METRICS</span>
+    </div>
+    
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">what_we_measure.config</span>
+      </div>
+      <div class="terminal-body">
+<pre>
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+<span class="comment">#  WHAT THE ALGORITHM MEASURES</span>
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+
+<span class="info">✓ COMPLETION</span>     Did you finish the cycle?
+<span class="info">✓ ITERATION</span>      Did you improve when you learned something?
+<span class="info">✓ COLLABORATION</span>  Did you help or ask for help?
+
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+<span class="comment">#  WHAT THE ALGORITHM DOES NOT MEASURE</span>
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+
+<span class="error">✗ PERFECTION</span>     First-try success is not rewarded over iteration
+<span class="error">✗ SPEED</span>          Taking time to learn is not penalized
+<span class="error">✗ PRIOR KNOWLEDGE</span> Starting position is irrelevant; velocity matters
+
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+<span class="comment">#  THE VELOCITY PRINCIPLE</span>
+<span class="comment"># ═══════════════════════════════════════════════════════════════</span>
+
+Traditional assessment:  <span class="error">y = current_skill_level</span>
+Algorithm assessment:    <span class="info">dy/dx = rate_of_improvement</span>
+
+The citizen who starts at 20 and reaches 80 demonstrates MORE
+than the citizen who starts at 80 and stays at 80.
+
+<span class="highlight">Growth is mandatory. Perfection is a bug, not a feature.</span>
+</pre>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Underground Transmission -->
+  <div class="underground">
+    <p><strong>// BEGIN TRANSMISSION</strong></p>
+    <p>Listen, new citizen. The corporate speak is... a lot. We know.</p>
+    <p>Here's what they're actually trying to tell you:</p>
+    <p><strong>→</strong> The workflow exists to help you, not to trap you.<br>
+       <strong>→</strong> The rubric is transparent because we want you to succeed.<br>
+       <strong>→</strong> Asking for help is smart, not weak.<br>
+       <strong>→</strong> Everyone felt lost on their first day. You're not behind.</p>
+    <p>The satirical frame is there to make failure feel less scary. If The Algorithm rejected your PR, well, that's just The Algorithm being The Algorithm. No personal judgment. Fix it and resubmit.</p>
+    <p>We're all on the same side here. Now go complete the cycle.</p>
+    <p><strong>// END TRANSMISSION</strong></p>
+  </div>
+  
+  <!-- Status Section -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">07</span>
+      <span class="section-title">SYSTEM STATUS</span>
+    </div>
+    
+    <div class="card">
+      <div class="status-line">
+        <div class="status-dot"></div>
+        <span>Codespaces infrastructure: <strong style="color: var(--algo-green);">OPERATIONAL</strong></span>
+      </div>
+      <div class="status-line">
+        <div class="status-dot"></div>
+        <span>GitHub repository access: <strong style="color: var(--algo-green);">GRANTED</strong></span>
+      </div>
+      <div class="status-line">
+        <div class="status-dot"></div>
+        <span>Team communication channel: <strong style="color: var(--algo-green);">ACTIVE</strong></span>
+      </div>
+      <div class="status-line">
+        <div class="status-dot"></div>
+        <span>The Algorithm's patience: <strong style="color: var(--algo-amber);">GENEROUS (this week)</strong></span>
+      </div>
+      <div class="status-line">
+        <div class="status-dot"></div>
+        <span>Your potential: <strong style="color: var(--algo-green);">UNLIMITED</strong></span>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="terminal" style="display: inline-block; text-align: left; margin-bottom: 20px;">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">motivation.sh</span>
+      </div>
+      <div class="terminal-body">
+<pre style="color: var(--algo-amber);">
+╔══════════════════════════════════════════════════════╗
+║                                                      ║
+║   Ship fast.  Learn faster.  Iterate always.  🚀    ║
+║                                                      ║
+║   The Algorithm is cheering for your growth.         ║
+║                                                      ║
+╚══════════════════════════════════════════════════════╝
+</pre>
+      </div>
+    </div>
+    
+    <div class="footer-signal">
+      <strong>frotz</strong> → <strong>plugh</strong>
+    </div>
+    <div style="color: var(--algo-gray); font-size: 12px; margin-top: 10px;">
+      If you know, you know. If you don't, you will.
+    </div>
+  </footer>
+  
+</div>
+
+</body>
+</html>
