@@ -171,6 +171,9 @@ const browser = await chromium.launch();
   check('and the cursor starts past it',
     (await page.evaluate(() => [...document.querySelectorAll('.line .char')]
       .findIndex((s) => s.classList.contains('char-current')))) === 4);
+  check('supplied whitespace is dotted, so you can see it is there',
+    (await page.$eval('.char-supplied.char-space',
+      (n) => getComputedStyle(n, '::before').content)) !== 'none');
   await page.close();
 }
 
@@ -439,6 +442,36 @@ const browser = await chromium.launch();
   check('and turning it off sticks as well',
     (await page.evaluate(() =>
       JSON.parse(localStorage.getItem('tt:progress')).settings.unlockAll)) === false);
+  await page.close();
+}
+
+/* ── the cursor asks for no character it will refuse ──────────────────── */
+{
+  const page = await browser.newPage();
+  await page.goto(PAGE);
+  await page.evaluate(() => { location.hash = '#/lesson/home-1'; });
+  await page.waitForTimeout(350);
+  await page.click('.stage');
+  await page.keyboard.type('fff', { delay: 10 });
+  await page.waitForTimeout(200);
+
+  const cursor = await page.$eval('.char-current', (n) => ({
+    space: n.classList.contains('char-space'),
+    before: getComputedStyle(n, '::before').content
+  }));
+  check('the cursor lands on a space', cursor.space === true, JSON.stringify(cursor));
+  // Two testers in three typed a period when a dot was drawn here.
+  check('and draws no glyph inside itself to mistype',
+    cursor.before === 'none', cursor.before);
+
+  await page.keyboard.press('.');
+  await page.waitForTimeout(150);
+  check('a period would have been refused anyway',
+    (await page.textContent('#hud-err')) === '1');
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(150);
+  check('and Space is what moves it on',
+    (await page.$eval('.char-current', (n) => n.textContent)) === 'j');
   await page.close();
 }
 
