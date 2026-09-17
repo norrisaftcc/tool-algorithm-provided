@@ -149,9 +149,31 @@ Three sources of truth, best first: `navigator.keyboard.getLayoutMap()` where
 the browser offers it; observation of real keystrokes, which corrects the map
 within a lesson on any browser; and a hand-written table.
 
-Only `us` and `uk` ship as tables. Writing AZERTY and QWERTZ from memory would
-mean shipping plausible-looking wrong answers about which finger to use, so
-those learners get the detecting mode instead.
+Five tables ship. `us` and `uk` were written by hand against physical boards.
+`fr` (AZERTY), `de` (QWERTZ) and `es` were not written from memory — that would
+mean shipping plausible-looking wrong answers about which finger to use —
+but derived mechanically from the X11 xkb data in `/usr/share/X11/xkb/symbols`:
+each layout's `include` chain resolved, levels 1, 2 and 3 read off every key,
+then everything outside ASCII 32–126 dropped along with every dead key. A dead
+key produces no character on its own, so `^` on the German and Spanish tables
+is absent rather than guessed at, and resolves to nothing. Anything else still
+gets the detecting mode.
+
+Those three need a third level. `[base, shifted]` became `[base, shifted,
+altgr]`, which `us` and `uk` simply do not use; AltGr only ever fills gaps, so
+a character some key produces plain or shifted is never taught as an AltGr
+press. On all three the characters the C++ and Python tracks lean on — `{ } [ ]
+\ | @ # ~` — live there, and the keyboard highlights AltRight for them.
+
+Where a layout reaches the same character from two keys, the layout's own xkb
+section outranks what it inherits from the shared `latin` base. Spanish is the
+case in point: `symbols/es` defines `[ ] { }` itself, on the four keys right of
+P and L, which is where a physical Spanish board prints them — while AltGr+7/8/
+9/0 reaches the same four characters only because `es` includes `latin(type4)`.
+Both are real; the printed one is the one worth teaching. That preference is
+declared explicitly in `ES_PREFER` rather than left to the order the table
+happens to be written in, and an observation from the learner's real keyboard
+still outranks it.
 
 ### Storage
 

@@ -911,12 +911,271 @@
   });
 
   add('layouts: every code the shipped tables name has a finger assigned', function () {
-    [['us', layoutsM.US], ['uk', layoutsM.UK]].forEach(function (pair) {
+    [['us', layoutsM.US], ['uk', layoutsM.UK], ['fr', layoutsM.FR],
+     ['de', layoutsM.DE], ['es', layoutsM.ES]].forEach(function (pair) {
       Object.keys(pair[1]).forEach(function (code) {
         ok(layoutsM.KEY_FINGER[code],
            pair[0] + ' maps ' + code + ' but no finger owns it');
       });
     });
+  });
+
+  /* --- the derived AZERTY / QWERTZ / Spanish tables ------------------------
+   * These three were derived from the X11 xkb data rather than recalled, so
+   * the assertions below quote the derivation: each one is checkable against
+   * /usr/share/X11/xkb/symbols/{fr,de,es} and the `latin` base they include.
+   */
+
+  // Every character the C++ and Python tracks are dense in.
+  var CODE_CHARS = '{}[]()<>=+-_*/\\|&%$#@^~;:\'",.'.split('');
+
+  // `^` is a dead key on both German and Spanish boards — dead_circumflex on
+  // <TLDE> for de, on <AD11> shifted for es — so it produces no character on
+  // its own. It is left out rather than guessed at, and must resolve to
+  // nothing rather than to a plausible wrong key.
+  var DEAD_ONLY = { fr: [], de: ['^'], es: ['^'] };
+
+  ['fr', 'de', 'es'].forEach(function (id) {
+    add('layouts: ' + id + ' reaches the characters code is written in',
+        function () {
+      var r = layoutsM.createResolver(id, null);
+      var rendered = [];
+      layoutsM.ROWS.forEach(function (row) {
+        row.forEach(function (spec) { rendered.push(spec.code); });
+      });
+
+      CODE_CHARS.forEach(function (ch) {
+        var hit = r.resolve(ch);
+        if (DEAD_ONLY[id].indexOf(ch) !== -1) {
+          eq(hit, null, id + ' claims a key for ' + ch + ', which is a dead ' +
+             'key there and produces nothing on its own');
+          return;
+        }
+        ok(hit, id + ' cannot place ' + ch);
+        ok(layoutsM.KEY_FINGER[hit.code],
+           id + ' places ' + ch + ' on ' + hit.code + ', which has no finger');
+        ok(rendered.indexOf(hit.code) !== -1,
+           id + ' places ' + ch + ' on ' + hit.code + ', which is not rendered');
+        ok(hit.finger && hit.hand, id + ' gives ' + ch + ' no finger to press it');
+        ok(hit.level === 'base' || hit.level === 'shift' || hit.level === 'altgr',
+           id + ' put ' + ch + ' on an unknown level ' + hit.level);
+      });
+
+      // Letters and digits, which no layout may lose.
+      'abcdefghijklmnopqrstuvwxyz0123456789'.split('').forEach(function (ch) {
+        ok(r.resolve(ch), id + ' cannot place ' + ch);
+      });
+      eq(r.resolve(' ').code, 'Space');
+    });
+  });
+
+  add('layouts: the third level is AltGr, and only where xkb says so', function () {
+    // Each of these is level 3 of the named key in the xkb source.
+    var expected = {
+      // symbols/fr "basic": <AE04> [apostrophe, 4, braceleft, dollar] and so on
+      fr: {
+        '{': ['Digit4', 'altgr'], '}': ['Equal', 'altgr'],
+        '[': ['Digit5', 'altgr'], ']': ['Minus', 'altgr'],
+        '\\': ['Digit8', 'altgr'], '|': ['Digit6', 'altgr'],
+        '#': ['Digit3', 'altgr'], '@': ['Digit0', 'altgr'],
+        '^': ['Digit9', 'altgr'],
+        // and the levels below it, which AltGr must not have stolen
+        '(': ['Digit5', 'base'], ')': ['Minus', 'base'],
+        '<': ['IntlBackslash', 'base'], '>': ['IntlBackslash', 'shift'],
+        '~': ['Backquote', 'shift'], 'a': ['KeyQ', 'base'],
+        'A': ['KeyQ', 'shift'], ',': ['KeyM', 'base'], ';': ['Comma', 'base']
+      },
+      // symbols/de "basic": <AE11> [ssharp, question, backslash, ...],
+      // latin(type4) <AE07>..<AE10> carry the braces and brackets.
+      de: {
+        '\\': ['Minus', 'altgr'], '{': ['Digit7', 'altgr'],
+        '[': ['Digit8', 'altgr'], ']': ['Digit9', 'altgr'],
+        '}': ['Digit0', 'altgr'], '@': ['KeyQ', 'altgr'],
+        '~': ['BracketRight', 'altgr'], '|': ['IntlBackslash', 'altgr'],
+        '#': ['Backslash', 'base'], "'": ['Backslash', 'shift'],
+        '+': ['BracketRight', 'base'], '*': ['BracketRight', 'shift'],
+        'z': ['KeyY', 'base'], 'y': ['KeyZ', 'base'],
+        '-': ['Slash', 'base'], '_': ['Slash', 'shift']
+      },
+      // symbols/es "basic": <TLDE> [masculine, ordfeminine, backslash, ...],
+      // <AE01> [1, exclam, bar, ...], <AE02> [2, quotedbl, at, ...].
+      es: {
+        '\\': ['Backquote', 'altgr'], '|': ['Digit1', 'altgr'],
+        '@': ['Digit2', 'altgr'], '#': ['Digit3', 'altgr'],
+        '~': ['Digit4', 'altgr'],
+        // es reaches [ ] { } from two places: AltGr+7/8/9/0, inherited from
+        // latin(type4), and the four keys right of P and L, which symbols/es
+        // defines itself and which a physical Spanish board prints. The
+        // preference map picks the printed ones. See ES_PREFER in layouts.js.
+        '[': ['BracketLeft', 'altgr'], ']': ['BracketRight', 'altgr'],
+        '{': ['Quote', 'altgr'], '}': ['Backslash', 'altgr'],
+        "'": ['Minus', 'base'], '?': ['Minus', 'shift'],
+        '+': ['BracketRight', 'base'], '<': ['IntlBackslash', 'base']
+      }
+    };
+
+    Object.keys(expected).forEach(function (id) {
+      var r = layoutsM.createResolver(id, null);
+      Object.keys(expected[id]).forEach(function (ch) {
+        var want = expected[id][ch];
+        var hit = r.resolve(ch);
+        ok(hit, id + ' cannot place ' + ch);
+        eq(hit.code, want[0], id + ' places ' + ch + ' on the wrong key');
+        eq(hit.level, want[1], id + ' places ' + ch + ' on the wrong level');
+      });
+    });
+  });
+
+  add('layouts: an AltGr key highlights AltRight, not a Shift', function () {
+    // keyboard.js keys off level alone, so the level is the whole contract.
+    var fr = layoutsM.createResolver('fr', null);
+    eq(fr.resolve('{').level, 'altgr');
+    eq(layoutsM.shiftKeyFor(fr.resolve('{').hand), 'ShiftRight',
+       'the shift hint still exists, but the altgr branch is what runs');
+    var de = layoutsM.createResolver('de', null);
+    eq(de.resolve('\\').level, 'altgr');
+  });
+
+  add('layouts: the ISO key carries < > and | on all three derived tables', function () {
+    // <LSGT> is [less, greater, bar] in symbols/pc, which de restates and
+    // fr and es inherit unchanged.
+    ['fr', 'de', 'es'].forEach(function (id) {
+      var r = layoutsM.createResolver(id, null);
+      eq(r.keyLabel('IntlBackslash'), '<', id + ' should render the ISO key');
+      eq(r.resolve('<').code, 'IntlBackslash', id + ' < ');
+      eq(r.resolve('>').code, 'IntlBackslash', id + ' > ');
+      eq(r.resolve('>').level, 'shift');
+      ok(layoutsM.KEY_FINGER.IntlBackslash, 'and a finger owns it');
+    });
+  });
+
+  add('layouts: a third level never steals a character from base or shift', function () {
+    // fr puts ~ on AltGr+2 as well as Shift+<TLDE>, and @ on AltGr+0 as well
+    // as AltGr+<AC01>. The easier press wins, and it must not depend on which
+    // key happens to be written down first.
+    var fr = layoutsM.createResolver('fr', null);
+    deepEq(fr.resolve('~'), { code: 'Backquote', level: 'shift',
+                              finger: 'pinky', hand: 'left' });
+    eq(fr.resolve('@').code, 'Digit0', 'the first AltGr key wins, in row order');
+
+    // es reaches | from both AltGr+1 and AltGr+<LSGT>; whichever is chosen it
+    // is an altgr press, never something cheaper that does not exist.
+    var es = layoutsM.createResolver('es', null);
+    eq(es.resolve('|').level, 'altgr');
+  });
+
+  add('layouts: an AltGr character reported without a modifier is not taken as base',
+      function () {
+    // code + key cannot distinguish AltGr+4 from plain 4, and believing the
+    // keystroke would relabel the keycap and demote a correct altgr entry.
+    var r = layoutsM.createResolver('fr', null);
+    eq(r.observe('Digit4', '{', false), false, 'the observation is refused');
+    eq(r.keyLabel('Digit4'), "'", 'the keycap still reads apostrophe');
+    deepEq(r.resolve('{'), { code: 'Digit4', level: 'altgr',
+                             finger: 'index', hand: 'left' });
+
+    // A genuine base observation on the same key is still believed.
+    eq(r.observe('Digit4', 'x', false), true);
+    eq(r.resolve('x').code, 'Digit4');
+    eq(r.resolve('{').code, 'Digit4', 'and the altgr entry survives it');
+    eq(r.resolve('{').level, 'altgr');
+  });
+
+  add('layouts: US and UK are unchanged by the arrival of a third level', function () {
+    var us = layoutsM.createResolver('us', null);
+    var uk = layoutsM.createResolver('uk', null);
+    var flat = {
+      '{': 'BracketLeft shift', '}': 'BracketRight shift',
+      '[': 'BracketLeft base', ']': 'BracketRight base',
+      '(': 'Digit9 shift', ')': 'Digit0 shift',
+      '<': 'Comma shift', '>': 'Period shift',
+      '=': 'Equal base', '+': 'Equal shift',
+      '-': 'Minus base', '_': 'Minus shift',
+      '*': 'Digit8 shift', '/': 'Slash base',
+      '&': 'Digit7 shift', '%': 'Digit5 shift', '$': 'Digit4 shift',
+      '^': 'Digit6 shift', ';': 'Semicolon base', ':': 'Semicolon shift',
+      ',': 'Comma base', '.': 'Period base', "'": 'Quote base'
+    };
+    Object.keys(flat).forEach(function (ch) {
+      [['us', us], ['uk', uk]].forEach(function (pair) {
+        var hit = pair[1].resolve(ch);
+        ok(hit, pair[0] + ' lost ' + ch);
+        eq(hit.code + ' ' + hit.level, flat[ch], pair[0] + ' moved ' + ch);
+      });
+    });
+
+    // The six places UK differs, and nothing else.
+    eq(us.resolve('\\').code + ' ' + us.resolve('\\').level, 'Backslash base');
+    eq(uk.resolve('\\').code + ' ' + uk.resolve('\\').level, 'IntlBackslash base');
+    eq(us.resolve('#').code + ' ' + us.resolve('#').level, 'Digit3 shift');
+    eq(uk.resolve('#').code + ' ' + uk.resolve('#').level, 'Backslash base');
+    eq(us.resolve('@').code + ' ' + us.resolve('@').level, 'Digit2 shift');
+    eq(uk.resolve('@').code + ' ' + uk.resolve('@').level, 'Quote shift');
+    eq(us.resolve('"').code + ' ' + us.resolve('"').level, 'Quote shift');
+    eq(uk.resolve('"').code + ' ' + uk.resolve('"').level, 'Digit2 shift');
+    eq(us.resolve('~').code + ' ' + us.resolve('~').level, 'Backquote shift');
+    eq(uk.resolve('~').code + ' ' + uk.resolve('~').level, 'Backslash shift');
+    eq(us.resolve('|').code + ' ' + us.resolve('|').level, 'Backslash shift');
+    eq(uk.resolve('|').code + ' ' + uk.resolve('|').level, 'IntlBackslash shift');
+
+    // No US or UK character is ever an AltGr press.
+    [['us', us], ['uk', uk]].forEach(function (pair) {
+      CODE_CHARS.concat('abcXYZ0189 '.split('')).forEach(function (ch) {
+        var hit = pair[1].resolve(ch);
+        if (hit) ok(hit.level !== 'altgr', pair[0] + ' made ' + ch + ' an AltGr press');
+      });
+    });
+  });
+
+  add('layouts: a layout\'s own section outranks what it inherits', function () {
+    // Both mappings are real under X11. The question is which one to teach,
+    // and the answer is the one printed on the key.
+    var es = layoutsM.createResolver('es', null);
+    [['[', 'BracketLeft'], [']', 'BracketRight'],
+     ['{', 'Quote'], ['}', 'Backslash']].forEach(function (pair) {
+      var hit = es.resolve(pair[0]);
+      eq(hit.code, pair[1], pair[0] + ' should point at the printed key');
+      eq(hit.level, 'altgr');
+      ok(layoutsM.KEY_FINGER[hit.code], 'and that key has a finger');
+    });
+
+    // The inherited route still exists in the table — dropping it would be a
+    // lie about what AltGr+7 does — it simply is not the one taught.
+    eq(layoutsM.ES.Digit7[2], '{', 'AltGr+7 still produces a brace');
+    eq(layoutsM.ES.Digit8[2], '[');
+
+    // And the preference must not leak into layouts that do not declare one.
+    eq(layoutsM.createResolver('de', null).resolve('{').code, 'Digit7',
+       'de keeps its own answer');
+    eq(layoutsM.createResolver('fr', null).resolve('{').code, 'Digit4',
+       'fr keeps its own answer');
+    eq(layoutsM.createResolver('us', null).resolve('{').code, 'BracketLeft',
+       'us is untouched');
+  });
+
+  add('layouts: a genuine observation still beats a curated preference', function () {
+    // Evidence from the learner's real keyboard outranks our judgement about
+    // which of two valid keys to teach.
+    var es = layoutsM.createResolver('es', null);
+    eq(es.resolve('[').code, 'BracketLeft');
+    // KeyZ carries no bracket in the es table, so this is new information
+    // rather than an AltGr press that lost its modifier.
+    es.observe('KeyZ', '[', false);
+    eq(es.resolve('[').code, 'KeyZ', 'what the keyboard really does wins');
+  });
+
+  add('layouts: an AltGr press that lost its modifier cannot demote the key', function () {
+    // code + key cannot distinguish AltGr+8 from plain 8. Believing such a
+    // report would relabel the 8 keycap as "[" and teach the wrong press, so
+    // an observation matching the key's own AltGr slot is refused outright.
+    var es = layoutsM.createResolver('es', null);
+    eq(layoutsM.ES.Digit8[2], '[', 'precondition: AltGr+8 does make a bracket');
+    es.observe('Digit8', '[', false);
+    eq(es.keyLabel('Digit8'), '8', 'the keycap still reads 8');
+    eq(es.resolve('[').code, 'BracketLeft', 'and the printed key is still taught');
+    // A genuine base observation on the same key is still accepted.
+    es.observe('Digit8', '8', false);
+    eq(es.keyLabel('Digit8'), '8');
   });
 
   root.TT_CASES = {
