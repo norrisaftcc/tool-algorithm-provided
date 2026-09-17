@@ -29,6 +29,11 @@
       sound: false,
       announceErrors: false,
       showKeyboard: true,
+      // Off by default, because the ladder is the course. On, every lesson
+      // opens at once: for a tester who has to reach the C++ track directly,
+      // and for a learner who already types and came for the code lines. It
+      // changes what may be started, never what counts as cleared.
+      unlockAll: false,
       // layoutId -> { code: [base, shifted, altgr] }, learned by watching.
       // Keyed by layout on purpose: what a US board does says nothing about
       // an AZERTY one, and a single shared map would let stale observations
@@ -97,6 +102,7 @@
     d.sound = bool(s.sound, d.sound);
     d.announceErrors = bool(s.announceErrors, d.announceErrors);
     d.showKeyboard = bool(s.showKeyboard, d.showKeyboard);
+    d.unlockAll = bool(s.unlockAll, d.unlockAll);
     d.observedLayouts = {};
     if (isObj(s.observedLayouts)) {
       Object.keys(s.observedLayouts).forEach(function (id) {

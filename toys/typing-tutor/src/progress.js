@@ -9,6 +9,14 @@
  * course, so a third completed attempt unlocks what follows and is recorded
  * as an override — it never touches the recorded bests, and the lesson list
  * shows the difference.
+ *
+ * The `unlockAll` setting is the blunter version of the same argument: it
+ * suspends the order outright, for a tester who has to reach a late lesson
+ * directly and for a learner who already types. It is a gate on what may be
+ * STARTED and nothing else. Clearing still means meeting the lesson's own
+ * targets, so nothing here writes a record it would not otherwise have
+ * written, and switching the setting back off restores the ladder with
+ * whatever was genuinely cleared still cleared.
  */
 (function (root) {
   'use strict';
@@ -118,45 +126,83 @@
     return recordFor(progress, lessonId).cleared === true;
   }
 
-  function isUnlocked(progress, lesson) {
+  /**
+   * Is the order suspended? Read from the settings handed in, falling back to
+   * the copy the progress blob carries. The store keeps those two in step; the
+   * explicit argument is there so a caller can ask what the rule ALONE says,
+   * which is what the lesson list needs in order to keep showing it.
+   */
+  function unlockAllOn(progress, settings) {
+    var s = settings || (progress && progress.settings) || null;
+    return !!(s && s.unlockAll);
+  }
+
+  /** Does the lesson's own prerequisite hold, ignoring any override? */
+  function prereqMet(progress, lesson) {
     if (!lesson) return false;
     if (!lesson.prereq) return true;
     return isCleared(progress, lesson.prereq);
   }
 
+  function isUnlocked(progress, lesson, settings) {
+    if (!lesson) return false;
+    return prereqMet(progress, lesson) || unlockAllOn(progress, settings);
+  }
+
   /**
    * Everything a lesson card needs, including the sentence that explains a
    * lock. A padlock glyph on its own tells a screen-reader user nothing.
+   *
+   * `gated` is what the ladder says, `unlocked` is what the learner may
+   * actually do, and they differ only while the order is suspended. Both are
+   * reported so the list can stay legible instead of pretending the
+   * prerequisite was never there.
    */
-  function lessonState(progress, lesson, lessonsIndex) {
+  function lessonState(progress, lesson, lessonsIndex, settings) {
     var rec = recordFor(progress, lesson.id);
-    var unlocked = isUnlocked(progress, lesson);
-    var reason = '';
-    if (!unlocked) {
+    var met = prereqMet(progress, lesson);
+    var unlocked = met || unlockAllOn(progress, settings);
+
+    var bar = '';
+    if (!met) {
       var pre = lessonsIndex ? lessonsIndex.get(lesson.prereq) : null;
-      reason = pre
-        ? 'Locked — clear "' + pre.title + '" at ' +
+      if (pre) {
+        bar = '"' + pre.title + '" at ' +
           Math.round(pre.targetAccuracy * 100) + '% accuracy and ' +
-          pre.targetWpm + ' wpm to unlock.'
-        : 'Locked.';
+          pre.targetWpm + ' wpm';
+      }
     }
+
+    var lockReason = '';
+    var bypassReason = '';
+    if (!met && !unlocked) {
+      lockReason = bar ? 'Locked — clear ' + bar + ' to unlock.' : 'Locked.';
+    } else if (!met) {
+      bypassReason = bar
+        ? 'Opened out of order — the usual way in is to clear ' + bar + '.'
+        : 'Opened out of order.';
+    }
+
     return {
       id: lesson.id,
       unlocked: unlocked,
+      gated: !met,
+      bypassed: !met && unlocked,
       cleared: rec.cleared,
       byOverride: rec.clearedByOverride,
       attempts: rec.attempts,
       bestWpm: rec.bestWpm,
       bestAccuracy: rec.bestAccuracy,
-      lockReason: reason
+      lockReason: lockReason,
+      bypassReason: bypassReason
     };
   }
 
   /** The first unlocked, uncleared lesson — what the home screen suggests. */
-  function nextLesson(progress, lessonList) {
+  function nextLesson(progress, lessonList, settings) {
     for (var i = 0; i < lessonList.length; i++) {
       var l = lessonList[i];
-      if (isUnlocked(progress, l) && !isCleared(progress, l.id)) return l;
+      if (isUnlocked(progress, l, settings) && !isCleared(progress, l.id)) return l;
     }
     return null;
   }
@@ -184,6 +230,8 @@
     evaluate: evaluate,
     recordResult: recordResult,
     isCleared: isCleared,
+    prereqMet: prereqMet,
+    unlockAllOn: unlockAllOn,
     isUnlocked: isUnlocked,
     lessonState: lessonState,
     nextLesson: nextLesson,

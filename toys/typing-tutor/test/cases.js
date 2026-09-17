@@ -25,7 +25,8 @@
     metrics: req('metrics'),
     progress: req('progress'),
     drills: req('drills'),
-    lessons: req('lessons')
+    lessons: req('lessons'),
+    store: req('store')
   };
 
   /* --- a minimal assertion kit, so no adapter sits between the runners ----- */
@@ -1218,6 +1219,125 @@
     // The US slot is untouched and still applies to US.
     var usAgain = layoutsM.createResolver('us', scoped.us);
     eq(usAgain.resolve('z').code, 'KeyZ');
+  });
+
+
+  /* ======================================================================
+     starting anywhere
+     ====================================================================== */
+
+  add('progress: opening every lesson does not clear a single one', function () {
+    var p = TTm.storage.defaults();
+    var late = TTm.lessons.get('cpp-template');
+    eq(TTm.progress.isUnlocked(p, late), false, 'gated by default');
+    eq(TTm.progress.isUnlocked(p, late, { unlockAll: true }), true);
+    eq(TTm.progress.isCleared(p, 'cpp-template'), false,
+      'reaching it is not the same as passing it');
+    eq(TTm.progress.isCleared(p, 'cpp-algorithm'), false,
+      'and nothing upstream was marked either');
+  });
+
+  add('progress: the setting is read from the progress blob when none is passed', function () {
+    var p = TTm.storage.defaults();
+    var late = TTm.lessons.get('py-idioms');
+    eq(TTm.progress.isUnlocked(p, late), false);
+    p.settings.unlockAll = true;
+    eq(TTm.progress.isUnlocked(p, late), true, 'the store keeps the two in step');
+    eq(TTm.progress.isUnlocked(p, late, { unlockAll: false }), false,
+      'and an explicit argument still wins, which is how the list asks ' +
+      'what the rule alone says');
+  });
+
+  add('progress: a bypassed lesson still says what the usual way in was', function () {
+    var p = TTm.storage.defaults();
+    var lesson = TTm.lessons.get('home-2');
+    var st = TTm.progress.lessonState(p, lesson, TTm.lessons, { unlockAll: true });
+    eq(st.unlocked, true, 'startable');
+    eq(st.gated, true, 'but the ladder has not moved');
+    eq(st.bypassed, true);
+    eq(st.lockReason, '', 'nothing is locked, so nothing claims to be');
+    ok(st.bypassReason.indexOf('Anchors') !== -1, 'names the lesson skipped past');
+    ok(/\d+%/.test(st.bypassReason), 'and the bar that would have been met');
+  });
+
+  add('progress: restoring the order keeps whatever was genuinely cleared', function () {
+    var open = { unlockAll: true };
+    var p = TTm.storage.defaults();
+    p.settings.unlockAll = true;
+
+    // Jump straight to the third C++ lesson and pass it properly.
+    var jumped = TTm.lessons.get('cpp-io');
+    p = TTm.progress.recordResult(p, jumped, {
+      finished: true, skippedLines: 0, wpm: 99, accuracy: 1, activeMs: 1000,
+      correctChars: 100, errorKeystrokes: 0,
+      perCharHits: {}, perCharErrors: {}, confusions: {}
+    }, 1).progress;
+    eq(TTm.progress.isCleared(p, 'cpp-io'), true, 'the targets were met');
+    eq(p.lessons['cpp-io'].clearedByOverride, false, 'on merit, not by override');
+
+    p.settings.unlockAll = false;
+    eq(TTm.progress.isCleared(p, 'cpp-io'), true, 'still cleared afterwards');
+    eq(TTm.progress.isUnlocked(p, TTm.lessons.get('cpp-loops')), true,
+      'and what it unlocks is open by the ordinary rule');
+    eq(TTm.progress.isUnlocked(p, TTm.lessons.get('cpp-io')), false,
+      'while the lessons it was jumped over are gated again');
+    eq(TTm.progress.isCleared(p, 'cpp-main'), false, 'and remain uncleared');
+
+    var st = TTm.progress.lessonState(p, jumped, TTm.lessons, open);
+    eq(st.cleared, true);
+    eq(st.bypassed, true, 'the card can show both at once');
+  });
+
+  add('progress: the suggested next lesson follows the same rule', function () {
+    var p = TTm.storage.defaults();
+    var cpp = TTm.lessons.track('cpp');
+    eq(TTm.progress.nextLesson(p, cpp), null, 'nothing to suggest while gated');
+    eq(TTm.progress.nextLesson(p, cpp, { unlockAll: true }).id, 'cpp-include',
+      'the first uncleared one once the order is off');
+  });
+
+  add('storage: the setting defaults off and survives a round trip', function () {
+    eq(TTm.storage.defaults().settings.unlockAll, false);
+    eq(TTm.storage.validate({ settings: { unlockAll: true } }).settings.unlockAll,
+      true);
+    eq(TTm.storage.validate({ settings: { unlockAll: 'yes' } }).settings.unlockAll,
+      false, 'a non-boolean is not a truthy yes');
+
+    var store = TTm.storage.create(TTm.storage.memoryBackend());
+    var p = TTm.storage.defaults();
+    p.settings.unlockAll = true;
+    eq(store.save(p), true);
+    eq(store.load().settings.unlockAll, true);
+
+    // An older blob predates the setting and must simply come back gated.
+    var older = TTm.storage.create(TTm.storage.memoryBackend());
+    older.backend.setItem(TTm.storage.KEY, JSON.stringify({
+      version: 1, settings: { themeId: 'dos', layoutId: 'fr' }, lessons: {}
+    }));
+    var migrated = older.load();
+    eq(migrated.settings.unlockAll, false);
+    eq(migrated.settings.themeId, 'dos', 'and the rest of it is untouched');
+  });
+
+  add('store: a gated lesson starts only once the order is off', function () {
+    var st = TTm.store.create({
+      persist: TTm.storage.create(TTm.storage.memoryBackend())
+    });
+
+    st.dispatch({ type: 'START_LESSON', lessonId: 'cpp-template' });
+    eq(st.getState().session, null, 'refused while gated');
+    ok(/Settings/.test(st.getState().ui.toast || ''),
+      'and the refusal says where the switch is');
+
+    st.dispatch({ type: 'SET_SETTING', key: 'unlockAll', value: true });
+    st.dispatch({ type: 'START_LESSON', lessonId: 'cpp-template' });
+    var s = st.getState();
+    ok(s.session, 'started');
+    eq(s.lesson.id, 'cpp-template');
+    eq(s.session.lineIndex, 0, 'on the first line, like any other lesson');
+
+    // And it is genuinely persisted, not just held in memory for this screen.
+    eq(st.persist.load().settings.unlockAll, true);
   });
 
   root.TT_CASES = {

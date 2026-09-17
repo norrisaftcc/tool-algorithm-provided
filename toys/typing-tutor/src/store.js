@@ -90,8 +90,9 @@
     function startLesson(lessonId) {
       var lesson = lessons.get(lessonId);
       if (!lesson) { toast('No such lesson.'); return; }
-      if (!progressApi.isUnlocked(state.progress, lesson)) {
-        toast('That lesson is still locked.');
+      if (!progressApi.isUnlocked(state.progress, lesson, state.settings)) {
+        toast('That lesson is locked. Settings has a switch that opens ' +
+              'every lesson at once.');
         return;
       }
       state.lesson = lesson;

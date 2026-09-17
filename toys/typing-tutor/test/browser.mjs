@@ -289,6 +289,71 @@ const browser = await chromium.launch();
   await page.close();
 }
 
+/* ── starting anywhere ────────────────────────────────────────────────── */
+{
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  await page.goto(PAGE);
+  await page.waitForTimeout(300);
+
+  // A clean profile. The last Python lesson is nine lessons and a whole track
+  // away from anything this profile may start.
+  await page.evaluate(() => { location.hash = '#/lesson/py-idioms'; });
+  await page.waitForTimeout(350);
+  check('a deep link to a gated lesson falls back to its track',
+    (await page.textContent('#screen h1')) === 'Python');
+  check('and the refusal says where the switch is',
+    /Settings/.test(await page.evaluate(() => {
+      const t = document.getElementById('toast');
+      return t.hidden ? '' : t.textContent;
+    })));
+
+  // That switch is also on this screen, which is where the locks are met.
+  const opener = await page.$('#screen .notice button');
+  check('the track screen offers it too', !!opener);
+  await opener.click();
+  await page.waitForTimeout(250);
+  check('nothing in the track is left locked',
+    (await page.$$('#screen .card[disabled]')).length === 0);
+  check('and the list still shows what the order would have been',
+    (await page.$$eval('#screen .badge-open', (ns) => ns.length)) === 10);
+
+  await page.evaluate(() => { location.hash = '#/lesson/py-idioms'; });
+  await page.waitForTimeout(350);
+  check('the same deep link now opens the lesson',
+    (await page.textContent('#screen h1')) === 'Everyday idioms');
+
+  await page.click('.stage');
+  await page.keyboard.type('data', { delay: 10 });
+  await page.waitForTimeout(200);
+  check('and it runs live, like any other lesson',
+    (await page.$$('.char-typed')).length === 4);
+  check('with no errors of its own', (await page.textContent('#hud-err')) === '0');
+
+  // It is a stored setting, not a state of this screen.
+  await page.reload();
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { location.hash = '#/lesson/cpp-template'; });
+  await page.waitForTimeout(350);
+  check('it survives a reload, and covers the other track as well',
+    (await page.textContent('#screen h1')) === 'Templates and headers');
+
+  // And it goes back. The notice carries the way out from any screen.
+  await page.evaluate(() => { location.hash = '#/'; });
+  await page.waitForTimeout(300);
+  const restore = await page.$('#screen .notice button');
+  check('the home screen says the order is suspended', !!restore);
+  await restore.click();
+  await page.waitForTimeout(250);
+  await page.evaluate(() => { location.hash = '#/track/cpp'; });
+  await page.waitForTimeout(300);
+  check('and the gate comes back',
+    (await page.$$('#screen .card[disabled]')).length === 10);
+  check('no unexpected page errors', errors.length === 0, errors.join(' | '));
+  await page.close();
+}
+
 await browser.close();
 console.log('\n' + (fails.length ? fails.length + ' FAILURE(S)' : 'all browser checks passed'));
 process.exit(fails.length ? 1 : 0);
