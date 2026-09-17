@@ -55,6 +55,10 @@
     Enter: f('right', 'pinky'),
 
     ShiftLeft: f('left', 'pinky'),
+    // The extra key an ISO board has between left Shift and Z. Absent on ANSI,
+    // which is why the row entry below is marked `iso` and hidden when the
+    // active layout has nothing mapped to it.
+    IntlBackslash: f('left', 'pinky'),
     KeyZ: f('left', 'pinky'), KeyX: f('left', 'ring'), KeyC: f('left', 'middle'),
     KeyV: f('left', 'index'), KeyB: f('left', 'index'),
     KeyN: f('right', 'index'), KeyM: f('right', 'middle'),
@@ -91,6 +95,7 @@
     ],
     [
       { code: 'ShiftLeft', label: 'shift', w: 'xwide' },
+      { code: 'IntlBackslash', iso: true },
       { code: 'KeyZ' }, { code: 'KeyX' }, { code: 'KeyC' }, { code: 'KeyV' },
       { code: 'KeyB' }, { code: 'KeyN' }, { code: 'KeyM' }, { code: 'Comma' },
       { code: 'Period' }, { code: 'Slash' },

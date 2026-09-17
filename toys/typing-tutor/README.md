@@ -227,5 +227,8 @@ have to lean on shape rather than hue. `dos` is Norton Commander; its
 period-accurate dim cyan lands near the contrast floor, so `--fg-dim` is lifted
 and verified rather than left authentic.
 
-The Google Fonts import is an enhancement and never blocks. Offline, the local
-monospace stack carries the whole design.
+There is no webfont request. The stylesheet names JetBrains Mono and Orbitron
+so they are used by anyone who has them installed locally, but the fallback
+stack behind them is what the design was built and screenshotted against — so
+what ships is what was tested, and the "no network call" promise above holds
+literally.

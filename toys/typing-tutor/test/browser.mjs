@@ -84,14 +84,18 @@ const browser = await chromium.launch();
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
-  page.on('console', (m) => {
-    // The Google Fonts import is an enhancement. Offline, or behind a proxy,
-    // it fails and the local monospace stack carries the design. That is the
-    // designed behaviour, not a defect.
-    const t = m.text();
-    if (m.type() === 'error' && !/fonts\.googleapis|ERR_CERT|ERR_(NAME|INTERNET|CONNECTION)/.test(t)) {
-      errors.push('console: ' + t);
+  // Any failed request is now a real defect: the page makes no network calls
+  // at all, so nothing is excused here. A reintroduced webfont or CDN would
+  // surface as a console error and fail this check, which is the point.
+  page.on('requestfailed', (r) => errors.push('request failed: ' + r.url()));
+  page.on('request', (r) => {
+    const u = r.url();
+    if (!u.startsWith('file://') && !u.startsWith('data:')) {
+      errors.push('unexpected network request: ' + u);
     }
+  });
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push('console: ' + m.text());
   });
 
   await page.goto(PAGE);

@@ -857,6 +857,68 @@
     ok(/\d+%/.test(st.lockReason), 'and the bar to clear it');
   });
 
+  /* ======================================================================
+     regressions from review
+     ====================================================================== */
+
+  add('engine: skipping the last line while blurred does not bank the absence', function () {
+    var s = TTm.engine.createSession(lesson(['ab', 'cd']), {});
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'a', t: 0 }).state;
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'b', t: 100 }).state;
+    // Now on line 2. Blur away for a minute, then click Skip, which can be
+    // done without ever refocusing the typing area.
+    s = TTm.engine.reduce(s, { type: 'BLUR', t: 200 }).state;
+    s = TTm.engine.reduce(s, { type: 'SKIP_LINE', t: 60200 }).state;
+    eq(s.status, 'finished');
+    eq(s.idleDeductedMs, 60000, 'the open pause was settled, not ignored');
+    eq(TTm.metrics.activeMs(s), 200, 'only the time actually spent typing counts');
+  });
+
+  add('engine: skipping mid-lesson while blurred settles the pause too', function () {
+    var s = TTm.engine.createSession(lesson(['ab', 'cd', 'ef']), {});
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'a', t: 0 }).state;
+    s = TTm.engine.reduce(s, { type: 'BLUR', t: 100 }).state;
+    s = TTm.engine.reduce(s, { type: 'SKIP_LINE', t: 30100 }).state;
+    eq(s.pausedAt, null, 'no pause left hanging');
+    eq(s.idleDeductedMs, 30000);
+  });
+
+  add('layouts: the UK backslash resolves to a key the board actually renders', function () {
+    var uk = layoutsM.createResolver('uk', null);
+    var hit = uk.resolve('\\');
+    eq(hit.code, 'IntlBackslash', 'UK puts backslash left of Z, not left of Enter');
+    ok(layoutsM.KEY_FINGER[hit.code], 'and that key has a finger assigned');
+    eq(hit.finger, 'pinky');
+    eq(hit.hand, 'left');
+
+    var rendered = [];
+    layoutsM.ROWS.forEach(function (row) {
+      row.forEach(function (spec) { rendered.push(spec.code); });
+    });
+    ok(rendered.indexOf('IntlBackslash') !== -1, 'and the board renders it');
+  });
+
+  add('layouts: the ISO-only key is marked so ANSI boards can hide it', function () {
+    var spec = null;
+    layoutsM.ROWS.forEach(function (row) {
+      row.forEach(function (k) { if (k.code === 'IntlBackslash') spec = k; });
+    });
+    ok(spec && spec.iso === true, 'flagged as ISO-only');
+    eq(layoutsM.createResolver('us', null).keyLabel('IntlBackslash'), null,
+       'US has nothing mapped there, so it renders hidden');
+    eq(layoutsM.createResolver('uk', null).keyLabel('IntlBackslash'), '\\',
+       'UK does, so it renders');
+  });
+
+  add('layouts: every code the shipped tables name has a finger assigned', function () {
+    [['us', layoutsM.US], ['uk', layoutsM.UK]].forEach(function (pair) {
+      Object.keys(pair[1]).forEach(function (code) {
+        ok(layoutsM.KEY_FINGER[code],
+           pair[0] + ' maps ' + code + ' but no finger owns it');
+      });
+    });
+  });
+
   root.TT_CASES = {
     cases: cases,
     assert: { ok: ok, eq: eq, near: near, deepEq: deepEq },

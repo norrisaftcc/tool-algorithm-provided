@@ -55,7 +55,13 @@ let fails = 0;
 for (const [id, t] of Object.entries(themes)) {
   console.log('\n== ' + id + ' ==');
   for (const [fg, bg, min] of PAIRS) {
-    if (!t[fg] || !t[bg]) { console.log(`  ?  ${fg} on ${bg}: token missing`); continue; }
+    // A missing token is a failure, not a curiosity: this is the gate, and a
+    // deleted or misspelled variable must not slip through as "all pairs pass".
+    if (!t[fg] || !t[bg]) {
+      fails++;
+      console.log(`  FAIL ${fg.padEnd(13)} on ${bg.padEnd(11)} token missing`);
+      continue;
+    }
     const r = ratio(t[fg], t[bg]);
     const ok = r >= min;
     if (!ok) fails++;

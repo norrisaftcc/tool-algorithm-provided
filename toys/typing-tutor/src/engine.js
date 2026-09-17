@@ -348,6 +348,10 @@
 
       case 'SKIP_LINE':
         if (s.status !== 'finished') {
+          // Skipping can be clicked while the typing area is blurred, so the
+          // pause has to be settled here too. Otherwise finishing on the last
+          // line credits the whole absence as time spent typing.
+          resumeIfPaused(s, action.t);
           s.skippedLines++;
           s.lineTimes.push({
             index: s.lineIndex, ms: 0, errors: s.lineErrors, skipped: true

@@ -52,6 +52,13 @@
         }
         key.textContent = spec.label || resolver.keyLabel(spec.code) || '';
         key.setAttribute('data-code', spec.code);
+        // An ISO-only key is rendered for every layout but hidden unless the
+        // active one actually maps it, so a US board does not sprout a key it
+        // does not have and a UK board does not lose one it does.
+        if (spec.iso) {
+          key.setAttribute('data-iso', '1');
+          if (!resolver.keyLabel(spec.code)) key.classList.add('key-absent');
+        }
         caps[spec.code] = key;
         row.appendChild(key);
       });
@@ -155,6 +162,9 @@
         if (spec) return;
         var label = resolver.keyLabel(code);
         if (label) el.textContent = label;
+        if (el.getAttribute('data-iso')) {
+          el.classList.toggle('key-absent', !label);
+        }
       });
     }
 

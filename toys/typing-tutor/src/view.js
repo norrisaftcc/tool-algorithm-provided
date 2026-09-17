@@ -77,15 +77,16 @@
     var live = document.getElementById('live');
     var toastEl = document.getElementById('toast');
 
-    var resolver = M.layouts.createResolver(
-      store.getState().settings.layoutId,
-      store.getState().settings.observedLayout
-    );
-
     var app = {
       screen: screenEl,
       store: store,
-      resolver: resolver,
+      // Always read through app.resolver, never a captured local: importing or
+      // resetting progress replaces it, and a stale capture would keep feeding
+      // observations into a resolver nothing renders from any more.
+      resolver: M.layouts.createResolver(
+        store.getState().settings.layoutId,
+        store.getState().settings.observedLayout
+      ),
       lessonView: null,
       renderedRoute: null,
       lastToastId: 0,
@@ -111,11 +112,29 @@
       app.toastTimer = root.setTimeout(function () { toastEl.hidden = true; }, 4200);
     }
 
+    /**
+     * Presentation and the layout resolver both live outside the store — one
+     * on the document element, one on `app`. Anything that replaces the whole
+     * settings object has to push them both, or the UI reports one thing and
+     * behaves as another until a reload.
+     */
+    function applyPresentation(settings) {
+      M.theme.applyTheme(settings.themeId);
+      M.theme.applyMotion(settings.reduceMotion);
+      M.theme.applyFontScale(settings.fontScale);
+    }
+
+    function rebuildResolver(settings) {
+      app.resolver = M.layouts.createResolver(
+        settings.layoutId, settings.observedLayout
+      );
+    }
+
     /* --- layout learning -------------------------------------------------- */
 
     function persistLayout() {
       store.dispatch({
-        type: 'SET_SETTING', key: 'observedLayout', value: resolver.learned()
+        type: 'SET_SETTING', key: 'observedLayout', value: app.resolver.learned()
       });
     }
 
@@ -123,8 +142,8 @@
     var browserMap = M.layouts.readBrowserLayout();
     if (browserMap && typeof browserMap.then === 'function') {
       browserMap.then(function (map) {
-        if (resolver.adoptLayoutMap(map)) {
-          if (app.lessonView) app.lessonView.relabelKeyboard(resolver);
+        if (app.resolver.adoptLayoutMap(map)) {
+          if (app.lessonView) app.lessonView.relabelKeyboard(app.resolver);
           persistLayout();
         }
       }, function () { /* permissions policy said no; observation still works */ });
@@ -136,9 +155,9 @@
     document.addEventListener('keydown', function (e) {
       if (!e.code || !e.key) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (resolver.observe(e.code, e.key, e.shiftKey)) {
+      if (app.resolver.observe(e.code, e.key, e.shiftKey)) {
         observedSinceSave++;
-        if (app.lessonView) app.lessonView.relabelKeyboard(resolver);
+        if (app.lessonView) app.lessonView.relabelKeyboard(app.resolver);
         if (observedSinceSave >= 12) { observedSinceSave = 0; persistLayout(); }
       }
     }, true);
@@ -410,6 +429,7 @@
       var renderedLine = -1;
       var errTimer = null;
       var ticker = null;
+      var lastErrorSpoken = 0;
 
       function classFor(index, session) {
         if (index < session.indentEnd) return 'char char-supplied';
@@ -467,6 +487,27 @@
         }, 200);
       }
 
+      function describeChar(ch) {
+        if (ch === ' ') return 'space';
+        if (ch === '\n') return 'Enter';
+        if (ch === undefined || ch === '') return 'nothing';
+        return ch;
+      }
+
+      /**
+       * Off by default, and throttled when on. A live region firing on every
+       * mistype is unusable with a screen reader, which is why this is opt-in
+       * rather than the default behaviour.
+       */
+      function maybeAnnounceError(s2, e) {
+        if (!s2.settings.announceErrors) return;
+        if (e.counted === false) return;
+        var t = Date.now();
+        if (t - lastErrorSpoken < 900) return;
+        lastErrorSpoken = t;
+        announce('Error. Expected ' + describeChar(e.expected) + '.');
+      }
+
       function updateHud(session) {
         var wpmEl = document.getElementById('hud-wpm');
         var accEl = document.getElementById('hud-acc');
@@ -511,7 +552,10 @@
         else paintCursor(session);
 
         for (var i = 0; i < events.length; i++) {
-          if (events[i].type === 'incorrect') flashError(session);
+          if (events[i].type === 'incorrect') {
+            flashError(session);
+            maybeAnnounceError(s2, events[i]);
+          }
         }
 
         caps.hidden = !(s2.ui.capsLock || session.capsLockSuspected);
@@ -811,7 +855,7 @@
         selectControl('set-layout', M.layouts.LAYOUTS, s.settings.layoutId,
           function (v) {
             set('layoutId', v);
-            app.resolver = M.layouts.createResolver(v, s.settings.observedLayout);
+            rebuildResolver(store.getState().settings);
             renderRoute(true);
           })));
 
@@ -888,9 +932,8 @@
         var res = store.persist.importJSON(area.value);
         if (!res.ok) { showToast(res.error); return; }
         store.dispatch({ type: 'SET_PROGRESS', progress: res.progress });
-        M.theme.applyTheme(res.progress.settings.themeId);
-        M.theme.applyMotion(res.progress.settings.reduceMotion);
-        M.theme.applyFontScale(res.progress.settings.fontScale);
+        applyPresentation(res.progress.settings);
+        rebuildResolver(res.progress.settings);
         showToast('Progress imported.');
         renderRoute(true);
       }));
@@ -899,6 +942,11 @@
           'Delete all progress, statistics and settings on this device? ' +
           'This cannot be undone.')) return;
         store.dispatch({ type: 'RESET_PROGRESS' });
+        // Reset restores default settings, so the theme, motion, text size and
+        // layout all have to follow. Without this the screen claims the
+        // defaults while still wearing the old ones.
+        applyPresentation(store.getState().settings);
+        rebuildResolver(store.getState().settings);
         renderRoute(true);
       }));
       app.screen.appendChild(ioRow);

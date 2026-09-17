@@ -4,15 +4,15 @@
    blocks hard-codes a color.
    ========================================================================== */
 
-/* Optional enhancement. If the network is absent, or the page is opened from
-   file://, the local stack below carries the whole design. Nothing blocks. */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@700;900&display=swap');
-
 /* --------------------------------------------------------------------------
    Theme tokens
    -------------------------------------------------------------------------- */
 
 :root {
+  /* Local fonts only. There is deliberately no @import here: the toy promises
+     no CDN and no network call, and a webfont request would break both. The
+     named faces are used when someone happens to have them installed; the
+     stack behind them is what the design was built and screenshotted against. */
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas,
                'DejaVu Sans Mono', 'Liberation Mono', monospace;
   --font-display: 'Orbitron', var(--font-mono);
@@ -604,6 +604,9 @@ h3 { font-size: 14px; }
 .key[data-finger="middle"] { border-bottom-color: var(--f-middle); }
 .key[data-finger="index"] { border-bottom-color: var(--f-index); }
 .key[data-finger="thumb"] { border-bottom-color: var(--f-thumb); }
+
+/* A key the active layout does not have at all. */
+.key-absent { display: none; }
 
 .key-wide { flex: 2 1 0; }
 .key-xwide { flex: 3 1 0; }
