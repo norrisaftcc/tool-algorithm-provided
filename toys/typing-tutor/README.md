@@ -40,6 +40,11 @@ focus behaviour, reduced motion, and the promise that the page works from a
 `file://` URL. Playwright is not a dependency — the script skips cleanly if it
 is absent.
 
+All four run in CI on any push or pull request that touches this folder, via
+`.github/workflows/typing-tutor.yml`. The first three need no install at all;
+the browser checks are a separate job so a failure there reads as "the browser
+checks broke" rather than as "the build broke".
+
 ## Keys
 
 | Key | What it does |

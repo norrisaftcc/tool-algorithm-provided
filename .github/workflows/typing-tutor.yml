@@ -1,0 +1,72 @@
+name: typing-tutor
+
+# The toy itself has no dependencies and no build step, so the first job needs
+# no install at all — it is just Node running three scripts. The browser job is
+# split out because it is the only thing here that needs a download, and a
+# failure in it should be legible as "the browser checks broke", not as "the
+# build broke".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'toys/typing-tutor/**'
+      - '.github/workflows/typing-tutor.yml'
+  pull_request:
+    paths:
+      - 'toys/typing-tutor/**'
+      - '.github/workflows/typing-tutor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typing-tutor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Unit tests, lesson content, contrast
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Name the runner file, not the directory: `node --test <dir>` tries to
+      # load the directory itself, and its globbing would also pick up
+      # cases.js, which declares no tests of its own.
+      - name: Unit tests
+        run: node --test toys/typing-tutor/test/run.node.js
+
+      - name: Lesson content invariants
+        run: node toys/typing-tutor/tools/lint-lessons.js
+
+      - name: Theme contrast
+        run: node toys/typing-tutor/tools/check-contrast.js
+
+  browser:
+    name: Browser checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Installed globally on purpose. The repo has no package.json and should
+      # not grow one for a test tool, and test/browser.mjs already resolves a
+      # global install via `npm root -g` when a local one is absent.
+      - name: Install Playwright
+        run: |
+          npm install --global playwright@1
+          playwright install --with-deps chromium
+
+      # Covers what Node structurally cannot: beforeinput semantics, focus
+      # behaviour, reduced motion, and that the page works from a file:// URL.
+      - name: Browser checks
+        run: node toys/typing-tutor/test/browser.mjs
