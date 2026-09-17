@@ -91,8 +91,8 @@
       var lesson = lessons.get(lessonId);
       if (!lesson) { toast('No such lesson.'); return; }
       if (!progressApi.isUnlocked(state.progress, lesson, state.settings)) {
-        toast('That lesson is locked. Settings has a switch that opens ' +
-              'every lesson at once.');
+        toast('That lesson is locked. The Settings screen has a switch that ' +
+              'opens every lesson at once.');
         return;
       }
       state.lesson = lesson;

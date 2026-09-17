@@ -406,6 +406,42 @@ const browser = await chromium.launch();
   await page.close();
 }
 
+/* ── the same switch from the Settings screen ─────────────────────────── */
+{
+  const page = await browser.newPage();
+  await page.goto(PAGE);
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await page.waitForTimeout(350);
+
+  check('the switch starts off', (await page.isChecked('#set-unlock')) === false);
+  await page.click('#set-unlock');
+  await page.waitForTimeout(250);
+  check('it survives the re-render the notice forces',
+    (await page.isChecked('#set-unlock')) === true);
+  check('and keeps focus rather than dropping it at the top of the document',
+    (await page.evaluate(() => document.activeElement.id)) === 'set-unlock');
+  check('the screen says the order is now suspended',
+    !!(await page.$('#screen .notice button:has-text("Restore the order")')));
+  check('and the setting reached storage, not just the screen',
+    (await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('tt:progress')).settings.unlockAll)) === true);
+
+  await page.evaluate(() => { location.hash = '#/lesson/cpp-class'; });
+  await page.waitForTimeout(350);
+  check('a gated lesson opens by this path too',
+    (await page.textContent('#screen h1')) === 'Classes');
+
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await page.waitForTimeout(300);
+  check('the switch reads back on', (await page.isChecked('#set-unlock')) === true);
+  await page.click('#set-unlock');
+  await page.waitForTimeout(250);
+  check('and turning it off sticks as well',
+    (await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('tt:progress')).settings.unlockAll)) === false);
+  await page.close();
+}
+
 await browser.close();
 console.log('\n' + (fails.length ? fails.length + ' FAILURE(S)' : 'all browser checks passed'));
 process.exit(fails.length ? 1 : 0);

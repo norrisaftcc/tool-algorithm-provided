@@ -168,9 +168,11 @@
    * lock. A padlock glyph on its own tells a screen-reader user nothing.
    *
    * `gated` is what the ladder says, `unlocked` is what the learner may
-   * actually do, and they differ only while the order is suspended. Both are
-   * reported so the list can stay legible instead of pretending the
-   * prerequisite was never there.
+   * actually do. They diverge while the order is suspended, and they stay
+   * diverged afterwards for a lesson cleared out of order: its prerequisite is
+   * still unmet, so it is still `gated`, but having passed it you may always
+   * open it again. Both are reported so the list can stay legible instead of
+   * pretending the prerequisite was never there.
    */
   function lessonState(progress, lesson, lessonsIndex, settings) {
     var rec = recordFor(progress, lesson.id);
