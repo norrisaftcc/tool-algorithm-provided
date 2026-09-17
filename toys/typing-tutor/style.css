@@ -415,6 +415,9 @@ h3 { font-size: 14px; }
 .badge-cleared { color: var(--ok); }
 .badge-locked { color: var(--fg-faint); }
 .badge-new { color: var(--info); }
+/* Reached before the ladder would have allowed it. Warning-coloured, not
+   error-coloured: nothing is wrong, it is simply worth knowing. */
+.badge-open { color: var(--warn); }
 
 /* --------------------------------------------------------------------------
    The typing screen

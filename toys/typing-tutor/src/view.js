@@ -194,6 +194,22 @@
         n.appendChild(rowInner);
         frag.appendChild(n);
       }
+      if (s.settings.unlockAll) {
+        // Someone who switched this on in March and came back in May must be
+        // able to see it from the screen, rather than conclude the tutor has
+        // no progression at all.
+        var u = el('p', 'notice');
+        var uRow = el('div', 'notice-row');
+        uRow.appendChild(el('span', null,
+          'Every lesson is open. Progress is recorded exactly as usual — only ' +
+          'the order is suspended.'));
+        uRow.appendChild(button('Restore the order', 'btn', function () {
+          set('unlockAll', false);
+          renderRoute(true);
+        }));
+        u.appendChild(uRow);
+        frag.appendChild(u);
+      }
       return frag;
     }
 
@@ -213,7 +229,7 @@
         var list = M.lessons.track(t.id);
         if (!list.length) return;
         var sum = M.progress.trackSummary(s.progress, list);
-        var next = M.progress.nextLesson(s.progress, list);
+        var next = M.progress.nextLesson(s.progress, list, s.settings);
 
         var li = el('li');
         var card = button('', 'card', function () {
@@ -267,9 +283,33 @@
       app.screen.appendChild(el('h1', null, meta.name));
       app.screen.appendChild(el('p', 'lede', meta.blurb));
 
+      // The switch belongs here as well as in Settings: this is the screen
+      // where someone actually runs into a locked lesson, and sending them
+      // off to hunt for a setting is how a tester gives up instead.
+      var gated = list.filter(function (l) {
+        return !M.progress.isUnlocked(s.progress, l, { unlockAll: false });
+      });
+      if (gated.length || s.settings.unlockAll) {
+        var bar = el('p', 'notice');
+        var barRow = el('div', 'notice-row');
+        barRow.appendChild(el('span', null, s.settings.unlockAll
+          ? 'Every lesson here is open. Clearing one still means meeting its ' +
+            'own targets.'
+          : gated.length + ' of these ' + list.length + ' lessons open only ' +
+            'once the one before is cleared.'));
+        barRow.appendChild(button(
+          s.settings.unlockAll ? 'Restore the order' : 'Open every lesson',
+          'btn', function () {
+            set('unlockAll', !s.settings.unlockAll);
+            renderRoute(true);
+          }));
+        bar.appendChild(barRow);
+        app.screen.appendChild(bar);
+      }
+
       var grid = el('ul', 'grid');
       list.forEach(function (lesson, i) {
-        var st = M.progress.lessonState(s.progress, lesson, M.lessons);
+        var st = M.progress.lessonState(s.progress, lesson, M.lessons, s.settings);
         var li = el('li');
         var card = el('button', 'card');
         card.type = 'button';
@@ -289,9 +329,16 @@
         var metaRow = el('div', 'card-meta');
         if (!st.unlocked) {
           metaRow.appendChild(el('span', 'badge badge-locked', 'LOCKED'));
-        } else if (st.cleared) {
-          metaRow.appendChild(el('span', 'badge badge-cleared',
-            st.byOverride ? 'PASSED OVER' : 'CLEARED'));
+        } else {
+          if (st.cleared) {
+            metaRow.appendChild(el('span', 'badge badge-cleared',
+              st.byOverride ? 'PASSED OVER' : 'CLEARED'));
+          }
+          // Cleared and out of order are both true of a lesson jumped to and
+          // then passed, so neither badge hides the other.
+          if (st.bypassed) {
+            metaRow.appendChild(el('span', 'badge badge-open', 'OUT OF ORDER'));
+          }
         }
         if (st.bestWpm > 0) {
           metaRow.appendChild(el('span', null,
@@ -310,7 +357,8 @@
         } else {
           card.setAttribute('aria-label',
             'Lesson ' + (i + 1) + ': ' + lesson.title +
-            (st.cleared ? '. Cleared.' : '.'));
+            (st.cleared ? '. Cleared.' : '.') +
+            (st.bypassed ? ' ' + st.bypassReason : ''));
           card.addEventListener('click', function () {
             app.lastLaunchEl = card;
             root.location.hash = '#/lesson/' + encodeURIComponent(lesson.id);
@@ -643,7 +691,8 @@
       var nextLesson = M.lessons.all.filter(function (l) {
         return l.prereq === result.lesson.id;
       })[0];
-      if (nextLesson && M.progress.isUnlocked(store.getState().progress, nextLesson)) {
+      if (nextLesson && M.progress.isUnlocked(
+            store.getState().progress, nextLesson, store.getState().settings)) {
         actions.appendChild(button('Next: ' + nextLesson.title, 'btn', function () {
           closeResult();
           root.location.hash = '#/lesson/' + encodeURIComponent(nextLesson.id);
@@ -875,6 +924,21 @@
         'way, since the reach has not been taught yet.',
         toggleControl('set-enter', s.settings.requireEnter, function (v) {
           set('requireEnter', v);
+        })));
+
+      app.screen.appendChild(settingRow('Open every lesson',
+        'Off, a lesson opens when the one before it is cleared. On, all of ' +
+        'them open at once — for reviewing a track directly, or for someone ' +
+        'who already types and came for the code lines. The targets do not ' +
+        'move either way: clearing a lesson still means meeting them.',
+        toggleControl('set-unlock', s.settings.unlockAll, function (v) {
+          set('unlockAll', v);
+          // The notice at the top of this screen changes with it, so the
+          // screen is rebuilt; put focus back on the switch that was just
+          // thrown rather than dumping it at the top of the document.
+          renderRoute(true);
+          var box = document.getElementById('set-unlock');
+          if (box) box.focus();
         })));
 
       app.screen.appendChild(settingRow('Show the on-screen keyboard',

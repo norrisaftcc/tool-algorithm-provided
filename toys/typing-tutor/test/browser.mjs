@@ -289,6 +289,159 @@ const browser = await chromium.launch();
   await page.close();
 }
 
+/* ── starting anywhere ────────────────────────────────────────────────── */
+{
+  const page = await browser.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  await page.goto(PAGE);
+  await page.waitForTimeout(300);
+
+  // A clean profile. The last Python lesson is nine lessons and a whole track
+  // away from anything this profile may start.
+  await page.evaluate(() => { location.hash = '#/lesson/py-idioms'; });
+  await page.waitForTimeout(350);
+  check('a deep link to a gated lesson falls back to its track',
+    (await page.textContent('#screen h1')) === 'Python');
+  check('and the refusal says where the switch is',
+    /Settings/.test(await page.evaluate(() => {
+      const t = document.getElementById('toast');
+      return t.hidden ? '' : t.textContent;
+    })));
+
+  // That switch is also on this screen, which is where the locks are met.
+  const opener = await page.$('#screen .notice button:has-text("Open every lesson")');
+  check('the track screen offers it too', !!opener);
+  await opener.click();
+  await page.waitForTimeout(250);
+  check('nothing in the track is left locked',
+    (await page.$$('#screen .card[disabled]')).length === 0);
+  check('and the list still shows what the order would have been',
+    (await page.$$eval('#screen .badge-open', (ns) => ns.length)) ===
+    (await page.$$('#screen .card')).length);
+
+  await page.evaluate(() => { location.hash = '#/lesson/py-idioms'; });
+  await page.waitForTimeout(350);
+  check('the same deep link now opens the lesson',
+    (await page.textContent('#screen h1')) === 'Everyday idioms');
+
+  await page.click('.stage');
+  await page.keyboard.type('data', { delay: 10 });
+  await page.waitForTimeout(200);
+  check('and it runs live, like any other lesson',
+    (await page.$$('.char-typed')).length === 4);
+  check('with no errors of its own', (await page.textContent('#hud-err')) === '0');
+
+  // It is a stored setting, not a state of this screen.
+  await page.reload();
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { location.hash = '#/lesson/cpp-template'; });
+  await page.waitForTimeout(350);
+  check('it survives a reload, and covers the other track as well',
+    (await page.textContent('#screen h1')) === 'Templates and headers');
+
+  // And it goes back. The notice carries the way out from any screen.
+  await page.evaluate(() => { location.hash = '#/'; });
+  await page.waitForTimeout(300);
+  const restore = await page.$('#screen .notice button:has-text("Restore the order")');
+  check('the home screen says the order is suspended', !!restore);
+  await restore.click();
+  await page.waitForTimeout(250);
+  await page.evaluate(() => { location.hash = '#/track/cpp'; });
+  await page.waitForTimeout(300);
+  check('and the gate comes back',
+    (await page.$$('#screen .card[disabled]')).length === 10);
+  check('with no lesson still claiming to be out of order',
+    (await page.$$('#screen .badge-open')).length === 0);
+  check('no unexpected page errors', errors.length === 0, errors.join(' | '));
+  await page.close();
+}
+
+/* ── a lesson passed out of order stays yours ─────────────────────────── */
+{
+  const page = await browser.newPage();
+  // home-2 cleared while home-1 is not: a state only this feature can produce.
+  await page.addInitScript(() => {
+    localStorage.setItem('tt:progress', JSON.stringify({
+      version: 2, updatedAt: 1,
+      lessons: {
+        'home-2': {
+          cleared: true, clearedByOverride: false, attempts: 1, bestWpm: 41.5,
+          bestAccuracy: 1, lastWpm: 41.5, lastAt: 1, totalMs: 60000
+        }
+      },
+      settings: {
+        themeId: 'algocratic', layoutId: 'us', autoIndent: true,
+        requireEnter: true, reduceMotion: null, fontScale: 1, sound: false,
+        announceErrors: false, showKeyboard: true, unlockAll: false,
+        observedLayouts: {}
+      },
+      keyStats: {}, confusions: {},
+      totals: { sessions: 1, charsTyped: 80, activeMs: 60000 }
+    }));
+  });
+  await page.goto(PAGE);
+  await page.evaluate(() => { location.hash = '#/track/fundamentals'; });
+  await page.waitForTimeout(350);
+
+  const card = await page.$$eval('#screen .card', (ns) => ({
+    disabled: ns[1].disabled,
+    badges: [...ns[1].querySelectorAll('.badge')].map((b) => b.textContent),
+    label: ns[1].getAttribute('aria-label')
+  }));
+  check('a lesson passed out of order is not locked once the order returns',
+    card.disabled === false, JSON.stringify(card));
+  check('it still reads as cleared',
+    card.badges.indexOf('CLEARED') !== -1, JSON.stringify(card.badges));
+  check('and still says it was taken out of order',
+    card.badges.indexOf('OUT OF ORDER') !== -1, JSON.stringify(card.badges));
+  check('nothing tells the learner to clear a lesson they have already passed',
+    !/Locked/.test(card.label), card.label);
+
+  const cards = await page.$$('#screen .card');
+  await cards[1].click();
+  await page.waitForTimeout(350);
+  check('and it can be typed again',
+    (await page.textContent('#screen h1')) === 'Outward: D K S L');
+  await page.close();
+}
+
+/* ── the same switch from the Settings screen ─────────────────────────── */
+{
+  const page = await browser.newPage();
+  await page.goto(PAGE);
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await page.waitForTimeout(350);
+
+  check('the switch starts off', (await page.isChecked('#set-unlock')) === false);
+  await page.click('#set-unlock');
+  await page.waitForTimeout(250);
+  check('it survives the re-render the notice forces',
+    (await page.isChecked('#set-unlock')) === true);
+  check('and keeps focus rather than dropping it at the top of the document',
+    (await page.evaluate(() => document.activeElement.id)) === 'set-unlock');
+  check('the screen says the order is now suspended',
+    !!(await page.$('#screen .notice button:has-text("Restore the order")')));
+  check('and the setting reached storage, not just the screen',
+    (await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('tt:progress')).settings.unlockAll)) === true);
+
+  await page.evaluate(() => { location.hash = '#/lesson/cpp-class'; });
+  await page.waitForTimeout(350);
+  check('a gated lesson opens by this path too',
+    (await page.textContent('#screen h1')) === 'Classes');
+
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await page.waitForTimeout(300);
+  check('the switch reads back on', (await page.isChecked('#set-unlock')) === true);
+  await page.click('#set-unlock');
+  await page.waitForTimeout(250);
+  check('and turning it off sticks as well',
+    (await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('tt:progress')).settings.unlockAll)) === false);
+  await page.close();
+}
+
 await browser.close();
 console.log('\n' + (fails.length ? fails.length + ' FAILURE(S)' : 'all browser checks passed'));
 process.exit(fails.length ? 1 : 0);

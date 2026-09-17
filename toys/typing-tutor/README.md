@@ -26,7 +26,7 @@ It also serves unchanged from GitHub Pages.
 
 ```
 node --test toys/typing-tutor/test/run.node.js   # the unit suite
-node toys/typing-tutor/test/browser.mjs          # 33 browser checks (needs Playwright)
+node toys/typing-tutor/test/browser.mjs          # browser checks (needs Playwright)
 node toys/typing-tutor/tools/lint-lessons.js     # lesson content invariants
 node toys/typing-tutor/tools/check-contrast.js   # WCAG contrast, all three themes
 ```
@@ -108,6 +108,49 @@ A 4000-keystroke seeded fuzz walk asserts it after every action.
 A miss is tallied against the character that was **wanted**, never the key that
 was pressed — the useful fact is "you miss semicolons," not "you pressed `l`".
 A held wrong key collapses into one error; the screen still flashes each time.
+
+### Starting anywhere
+
+Each lesson opens when the one before it is cleared, and three finished
+attempts on a lesson reached in sequence open the next one regardless of score,
+so nobody is walled in by a target they cannot hit.
+
+That ladder is right for a learner and wrong for two other people: someone
+reviewing the C++ track, who would otherwise have to clear twenty-one
+fundamentals lessons to reach it, and someone who already types and came for
+the code lines. **Open every lesson** in Settings suspends the order outright.
+It is also offered on any track listing that has a locked lesson on it, which
+is where the question actually comes up.
+
+It gates what may be *started* and nothing else. The targets do not move, a
+cleared lesson is still one whose targets were met, and switching it back off
+restores the ladder with whatever was genuinely cleared still cleared.
+
+Two rules follow from that, and both are stated here because both were bugs
+first:
+
+- **A lesson you have cleared is always startable again**, whatever the order
+  says. Before the order could be suspended this went without saying — you
+  could only clear what you could start, so cleared implied the prerequisite
+  held. Without it, a lesson passed out of order comes back `LOCKED` the moment
+  the order is restored, unreplayable, and locked against a target the same
+  card is reporting a personal best for.
+- **The three-attempts escape hatch requires the prerequisite.** It exists for
+  a learner stuck *at* a lesson in sequence. A lesson reached by suspending the
+  order has no position on the ladder to be stuck at, and without that
+  condition three sloppy finishes on `sym-1` would open both code tracks
+  permanently, with no fundamentals lesson typed.
+
+The
+lesson list keeps saying what the order would have been — an `OUT OF ORDER`
+badge, and the prerequisite spelled out in the card's accessible name — so the
+progression stays legible while it is bypassed.
+
+Because it is a stored setting rather than a state of one screen, a `#/lesson/`
+link to any lesson in any track works once it is on, which is the point for a
+tester. A notice on the home screen says the order is suspended, and carries
+the way back, so nobody who switched it on months ago concludes the tutor has
+no progression at all.
 
 ### Supplied indentation
 
@@ -226,6 +269,9 @@ is the entire reason not to use filler.
 - Locked lessons are `disabled` buttons whose accessible name carries the
   reason: *"Locked — clear "Anchors: F and J" at 90% accuracy and 8 wpm to
   unlock."* A padlock glyph alone tells a screen-reader user nothing.
+- A lesson opened out of order carries the same information the other way:
+  *"Opened out of order — the usual way in is to clear …"* The `OUT OF ORDER`
+  badge is not the only place that is said.
 - One polite live region announces line changes, completion and Caps Lock.
   Per-keystroke errors are **not** announced — a region firing on every mistype
   is unusable. There is an opt-in setting for those who want it.
