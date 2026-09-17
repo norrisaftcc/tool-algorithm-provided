@@ -9,10 +9,19 @@ name: pages
 # directory an index.html — Pages serves no directory listing, so a folder
 # without one is a 404.
 #
-# PREREQUISITE: Pages requires either a public repository or a paid plan
-# (Pro/Team/Enterprise). On a free account with a private repository the
-# configure-pages step below fails with GitHub's own error explaining exactly
-# that; it is not a fault in this workflow.
+# PREREQUISITE, one time, by a human: Settings -> Pages -> Build and
+# deployment -> Source: "GitHub Actions".
+#
+# This cannot be automated from here. GITHUB_TOKEN can DEPLOY to Pages but
+# cannot CREATE the Pages site: actions/configure-pages with enablement: true
+# returns "Resource not accessible by integration" against the create-site
+# endpoint, whatever permissions the workflow requests. Creating a site needs
+# a PAT with administration rights, which is a far larger grant than a deploy
+# job should hold.
+#
+# So rather than failing every push until someone clicks that setting, the
+# job checks first and skips with a warning. The moment Pages is enabled, the
+# next push deploys with no further change here.
 
 on:
   push:
@@ -42,17 +51,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # enablement: true turns Pages on and sets its source to GitHub Actions
-      # without anyone visiting the settings screen. It needs the pages: write
-      # permission above; if org policy forbids it, this step fails loudly
-      # rather than deploying somewhere unexpected.
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
+      # A 404 from the Pages API means the site has never been created. Report
+      # that as a warning with the fix rather than as a failure: it is a
+      # one-time human action, not a broken build, and a permanently red main
+      # branch teaches people to ignore red.
+      - name: Is Pages enabled?
+        id: pages_check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HINT: 'Nothing was deployed. Enable Pages once at Settings -> Pages -> Build and deployment -> Source: GitHub Actions, then re-run this workflow. GITHUB_TOKEN can deploy to Pages but cannot create the site.'
+        run: |
+          if gh api "repos/${GITHUB_REPOSITORY}/pages" >/dev/null 2>&1; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+            echo 'Pages is enabled; deploying.'
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo "::warning title=Pages not enabled::${HINT}"
+            echo "${HINT}" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-      - uses: actions/upload-pages-artifact@v3
+      - if: steps.pages_check.outputs.enabled == 'true'
+        uses: actions/configure-pages@v5
+
+      - if: steps.pages_check.outputs.enabled == 'true'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: toys/typing-tutor
 
       - id: deployment
+        if: steps.pages_check.outputs.enabled == 'true'
         uses: actions/deploy-pages@v4
