@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="algocratic">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Typing tutor — test run</title>
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    .row { display: flex; gap: 12px; padding: 5px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .row-pass .tag { color: var(--ok); }
+    .row-fail { background: var(--heat-2); }
+    .row-fail .tag { color: var(--err); }
+    .tag { flex: 0 0 4ch; font-weight: 700; }
+    .why { color: var(--fg-dim); white-space: pre-wrap; margin: 4px 0 0 calc(4ch + 12px); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>Test run</h1>
+    <p class="lede">The same <code>cases.js</code> that <code>node --test</code> runs,
+      executed in a real browser. Open this file directly; no server needed.</p>
+    <div id="summary" class="tile" style="margin-bottom:20px">
+      <div class="tile-label">Result</div>
+      <div class="tile-value" id="count">running…</div>
+    </div>
+    <div id="out"></div>
+  </main>
+
+  <!-- Sources first, then the cases, then the runner. -->
+  <script defer src="../src/theme.js"></script>
+  <script defer src="../src/storage.js"></script>
+  <script defer src="../src/layouts.js"></script>
+  <script defer src="../src/keyboard.js"></script>
+  <script defer src="../src/engine.js"></script>
+  <script defer src="../src/metrics.js"></script>
+  <script defer src="../src/progress.js"></script>
+  <script defer src="../src/drills.js"></script>
+  <script defer src="../src/lessons.core.js"></script>
+  <script defer src="../src/lessons.python.js"></script>
+  <script defer src="../src/lessons.cpp.js"></script>
+  <script defer src="../src/lessons.js"></script>
+  <script defer src="cases.js"></script>
+  <script defer>
+    window.addEventListener('DOMContentLoaded', function () {
+      var out = document.getElementById('out');
+      var cases = (window.TT_CASES || {}).cases || [];
+      var pass = 0, fail = 0;
+
+      cases.forEach(function (c) {
+        var row = document.createElement('div');
+        var why = null;
+        try {
+          c.fn();
+          pass++;
+          row.className = 'row row-pass';
+        } catch (e) {
+          fail++;
+          row.className = 'row row-fail';
+          why = document.createElement('div');
+          why.className = 'why';
+          why.textContent = (e && e.message) || String(e);
+        }
+        var tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = why ? 'FAIL' : 'ok';
+        var name = document.createElement('span');
+        name.textContent = c.name;
+        row.appendChild(tag);
+        row.appendChild(name);
+        out.appendChild(row);
+        if (why) out.appendChild(why);
+      });
+
+      document.getElementById('count').textContent =
+        cases.length ? pass + ' passed, ' + fail + ' failed' : 'no cases loaded';
+    });
+  </script>
+</body>
+</html>
