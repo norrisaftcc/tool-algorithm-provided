@@ -21,7 +21,10 @@
   --motion-state: paused;
 }
 
-/* --- algocratic: inherited from MODULE1_ORIENTATION.html ------------------ */
+/* --- algocratic ----------------------------------------------------------
+   The house palette, copied from MODULE1_ORIENTATION.html in the repository
+   this toy started in. A snapshot, not a dependency: the values below are the
+   whole of it, so nothing breaks if either file moves. ------------------- */
 :root,
 :root[data-theme="algocratic"] {
   --bg: #0a0a0f;

@@ -243,8 +243,10 @@ is the entire reason not to use filler.
 
 ## Themes
 
-`algocratic` (default) inherits the palette from `MODULE1_ORIENTATION.html` at
-the repository root. `amber` is a VT220 phosphor, monochrome enough that errors
+`algocratic` (default) takes its palette from `MODULE1_ORIENTATION.html`, the
+style reference in the repository this toy started in. That is provenance
+rather than a dependency — the values are copied into `style.css` in full, so
+the theme survives either file moving elsewhere. `amber` is a VT220 phosphor, monochrome enough that errors
 have to lean on shape rather than hue. `dos` is Norton Commander; its
 period-accurate dim cyan lands near the contrast floor, so `--fg-dim` is lifted
 and verified rather than left authentic.
