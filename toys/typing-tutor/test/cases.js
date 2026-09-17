@@ -637,6 +637,69 @@
     eq(sum.lineTimes.length, 1);
   });
 
+  /* ======================================================================
+     lesson content
+     ====================================================================== */
+
+  add('lessons: the structural validator reports nothing', function () {
+    deepEq(TTm.lessons.validate(), [], 'validator found problems');
+  });
+
+  add('lessons: no fundamentals line demands a key it has not taught', function () {
+    TTm.lessons.byTrack.fundamentals.forEach(function (l) {
+      var allowed = TTm.lessons.cumulativeAllowed(l.id);
+      l.lines.forEach(function (line, i) {
+        for (var j = 0; j < line.length; j++) {
+          ok(allowed[line[j]],
+             l.id + ' line ' + (i + 1) + ' uses ' + JSON.stringify(line[j]) +
+             ' before it is taught');
+        }
+      });
+    });
+  });
+
+  add('lessons: every prerequisite chain terminates at a track head', function () {
+    TTm.lessons.all.forEach(function (l) {
+      var seen = {}, node = l, steps = 0;
+      while (node && node.prereq) {
+        ok(!seen[node.id], 'cycle at ' + node.id);
+        seen[node.id] = true;
+        var next = TTm.lessons.get(node.prereq);
+        ok(next, l.id + ' depends on missing lesson ' + node.prereq);
+        node = next;
+        ok(steps++ < 200, 'runaway chain from ' + l.id);
+      }
+    });
+  });
+
+  add('lessons: the fundamentals track introduces every key it later uses', function () {
+    var last = TTm.lessons.byTrack.fundamentals.slice(-1)[0];
+    var allowed = TTm.lessons.cumulativeAllowed(last.id);
+    'abcdefghijklmnopqrstuvwxyz0123456789'.split('').forEach(function (ch) {
+      ok(allowed[ch], 'the track never teaches ' + JSON.stringify(ch));
+    });
+    '(){}[]<>=+*|\\&%$#@_^~`;:\'",.?!/- \n'.split('').forEach(function (ch) {
+      ok(allowed[ch], 'the track never teaches ' + JSON.stringify(ch));
+    });
+  });
+
+  add('lessons: a session can be built and completed for every lesson', function () {
+    TTm.lessons.all.forEach(function (l) {
+      var s = TTm.engine.createSession(l, { autoIndent: true, requireEnter: true });
+      var guard = 0;
+      var t = 0;
+      while (s.status !== 'finished' && guard++ < 20000) {
+        var ch = TTm.engine.currentChar(s);
+        if (ch === null) break;
+        t += 50;
+        s = TTm.engine.reduce(s, { type: 'INPUT', char: ch, t: t }).state;
+      }
+      eq(s.status, 'finished', l.id + ' could not be completed');
+      eq(s.errorKeystrokes, 0, l.id + ' reported errors on a perfect run');
+      ok(s.correctChars > 0, l.id + ' scored nothing');
+    });
+  });
+
   root.TT_CASES = {
     cases: cases,
     assert: { ok: ok, eq: eq, near: near, deepEq: deepEq },
