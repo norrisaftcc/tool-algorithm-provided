@@ -529,19 +529,24 @@ h3 { font-size: 14px; }
   75% { transform: translateX(3px); }
 }
 
-/* Whitespace made visible, but only where it carries information: the
-   supplied indent you need to know exists, and the cursor when it is sitting
-   on a space. Dotting every space turns a typed line into confetti. */
-.char-supplied.char-space::before,
-.char-current.char-space::before {
+/* Whitespace made visible, but only where it carries information: the supplied
+   indent you need to know exists. Dotting every space turns a typed line into
+   confetti.
+
+   Deliberately NOT under the cursor. It was there once, and in live testing two
+   people in three typed a period when the cursor reached a space: inside the
+   filled cursor block, in ink colour, the dot renders exactly like a character
+   being asked for. The cursor already says which cell is next and the on-screen
+   keyboard lights up Space, so the dot bought nothing there and cost a
+   keystroke. A browser check pins this; please do not add it back. */
+.char-supplied.char-space::before {
   content: '\00B7';
   position: absolute;
   inset: 0;
   pointer-events: none;
   text-align: center;
+  color: var(--fg-faint);
 }
-.char-supplied.char-space::before { color: var(--fg-faint); }
-.char-current.char-space::before { color: var(--accent-ink); }
 .char-newline {
   color: var(--fg-faint);
   border: 1px solid var(--border);

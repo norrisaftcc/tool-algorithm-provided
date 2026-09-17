@@ -109,6 +109,23 @@ A miss is tallied against the character that was **wanted**, never the key that
 was pressed — the useful fact is "you miss semicolons," not "you pressed `l`".
 A held wrong key collapses into one error; the screen still flashes each time.
 
+### What the cursor asks for
+
+A space has no glyph, so supplied indentation is dotted with `·` to show it is
+there and how much of it there is. The cursor deliberately does **not** dot the
+space it is sitting on.
+
+It used to. In live testing with three people, two typed a period when the
+cursor reached a space — inside the filled cursor block, in ink colour, the dot
+renders exactly like a character being asked for. The cursor already says which
+cell is next, and the on-screen keyboard lights up Space with its finger
+colour, so the dot bought nothing there and cost a keystroke.
+
+The `⏎` at a line end stays under the cursor, because it is a different kind of
+thing: the dot is an addition over a character that has no glyph, while `⏎` is
+the newline's only visible representation. Hiding it would leave an empty box,
+and nobody mistypes it, since it is not a key.
+
 ### Starting anywhere
 
 Each lesson opens when the one before it is cleared, and three finished
