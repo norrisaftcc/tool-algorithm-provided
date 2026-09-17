@@ -163,7 +163,8 @@
       lessons: { 'home-1': 31.4 }
     }));
     var loaded = TTm.storage.create(mem).load();
-    eq(loaded.version, 1, 'version bumped');
+    eq(loaded.version, TTm.storage.CURRENT_VERSION,
+       'the chain runs all the way to the current version, not just one step');
     var rec = loaded.lessons['home-1'];
     ok(rec, 'lesson record survived');
     eq(rec.bestWpm, 31.4, 'flat number became bestWpm');
@@ -1176,6 +1177,47 @@
     // A genuine base observation on the same key is still accepted.
     es.observe('Digit8', '8', false);
     eq(es.keyLabel('Digit8'), '8');
+  });
+
+  add('storage: v1 observations are filed under the layout they came from', function () {
+    var mem = TTm.storage.memoryBackend();
+    mem.setItem(TTm.storage.KEY, JSON.stringify({
+      version: 1,
+      settings: { layoutId: 'uk', observedLayout: { KeyZ: ['z', 'Z'] } }
+    }));
+    var loaded = TTm.storage.create(mem).load();
+    eq(loaded.version, 2);
+    deepEq(loaded.settings.observedLayouts, { uk: { KeyZ: ['z', 'Z'] } },
+           'filed under uk, where it was actually collected');
+    eq(loaded.settings.observedLayout, undefined, 'the flat map is gone');
+  });
+
+  add('storage: a v1 blob with no observations migrates to an empty map', function () {
+    var mem = TTm.storage.memoryBackend();
+    mem.setItem(TTm.storage.KEY, JSON.stringify({ version: 1, settings: {} }));
+    var loaded = TTm.storage.create(mem).load();
+    deepEq(loaded.settings.observedLayouts, {});
+  });
+
+  add('layouts: one layout\'s observations never override another\'s table', function () {
+    // The bug this guards: observations were persisted as a single global map
+    // and applied over every table, so a US session made AZERTY resolve z to
+    // KeyZ — silently defeating the shipped fr table.
+    var us = layoutsM.createResolver('us', null);
+    us.observe('KeyZ', 'z', false);
+    us.observe('KeyW', 'w', false);
+    var fromUs = us.learned();
+
+    // What the settings layer now hands each resolver: only its own slot.
+    var scoped = { us: fromUs };
+    var fr = layoutsM.createResolver('fr', scoped.fr);
+    eq(fr.resolve('z').code, 'KeyW', 'AZERTY still says z is on the W position');
+    eq(fr.resolve('w').code, 'KeyZ');
+    eq(fr.keyLabel('KeyZ'), 'W', 'and the keycap still reads W');
+
+    // The US slot is untouched and still applies to US.
+    var usAgain = layoutsM.createResolver('us', scoped.us);
+    eq(usAgain.resolve('z').code, 'KeyZ');
   });
 
   root.TT_CASES = {

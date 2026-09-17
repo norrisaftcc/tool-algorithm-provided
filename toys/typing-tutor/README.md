@@ -25,7 +25,7 @@ It also serves unchanged from GitHub Pages.
 ## Testing it
 
 ```
-node --test toys/typing-tutor/test/run.node.js   # 59 unit cases
+node --test toys/typing-tutor/test/run.node.js   # the unit suite
 node toys/typing-tutor/test/browser.mjs          # 33 browser checks (needs Playwright)
 node toys/typing-tutor/tools/lint-lessons.js     # lesson content invariants
 node toys/typing-tutor/tools/check-contrast.js   # WCAG contrast, all three themes

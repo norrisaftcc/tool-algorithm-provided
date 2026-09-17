@@ -85,7 +85,8 @@
       // observations into a resolver nothing renders from any more.
       resolver: M.layouts.createResolver(
         store.getState().settings.layoutId,
-        store.getState().settings.observedLayout
+        (store.getState().settings.observedLayouts || {})[
+          store.getState().settings.layoutId]
       ),
       lessonView: null,
       renderedRoute: null,
@@ -125,17 +126,20 @@
     }
 
     function rebuildResolver(settings) {
+      // Only this layout's own observations. Carrying another layout's across
+      // would override the very tables the learner just selected.
       app.resolver = M.layouts.createResolver(
-        settings.layoutId, settings.observedLayout
+        settings.layoutId, (settings.observedLayouts || {})[settings.layoutId]
       );
     }
 
     /* --- layout learning -------------------------------------------------- */
 
     function persistLayout() {
-      store.dispatch({
-        type: 'SET_SETTING', key: 'observedLayout', value: app.resolver.learned()
-      });
+      var settings = store.getState().settings;
+      var all = Object.assign({}, settings.observedLayouts || {});
+      all[settings.layoutId] = app.resolver.learned();
+      store.dispatch({ type: 'SET_SETTING', key: 'observedLayouts', value: all });
     }
 
     // Source 1: ask the browser outright.
