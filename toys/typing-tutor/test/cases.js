@@ -263,9 +263,384 @@
     eq(v.totals.sessions, 0);
   });
 
-  root.TT_CASES = { cases: cases, assert: { ok: ok, eq: eq, near: near, deepEq: deepEq } };
-  if (isNode) module.exports = root.TT_CASES;
+  /* ======================================================================
+     engine: cursor arithmetic and the error model
+     ====================================================================== */
 
-  /* Exported for the engine cases appended below in later steps. */
-  root.TT_CASES.helpers = { lesson: lesson, type: type, rng: rng, add: add, TTm: TTm };
+  add('engine: a correct keystroke advances the cursor by exactly one', function () {
+    var s = TTm.engine.createSession(lesson(['abc']), {});
+    eq(s.cursor, 0);
+    eq(s.status, 'idle');
+    var r = TTm.engine.reduce(s, { type: 'INPUT', char: 'a', t: 1000 });
+    eq(r.state.cursor, 1);
+    eq(r.state.correctChars, 1);
+    eq(r.state.status, 'running');
+    eq(r.events[0].type, 'started', 'the clock starts on the first keystroke');
+    eq(r.events[1].type, 'correct');
+  });
+
+  add('engine: ten wrong keys then the right one leaves the cursor at one', function () {
+    var s = TTm.engine.createSession(lesson(['abc']), {});
+    var t = 1000;
+    // Alternate the wrong character so the auto-repeat guard stays out of it.
+    for (var i = 0; i < 10; i++) {
+      s = TTm.engine.reduce(s, {
+        type: 'INPUT', char: i % 2 ? 'x' : 'z', t: t
+      }).state;
+      t += 200;
+    }
+    eq(s.cursor, 0, 'a wrong key never advances');
+    eq(s.errorKeystrokes, 10);
+    eq(s.correctChars, 0);
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'a', t: t }).state;
+    eq(s.cursor, 1);
+    eq(s.errorKeystrokes, 10, 'errors are not forgiven by a later success');
+  });
+
+  add('engine: the auto-repeat guard counts a held key once', function () {
+    var s = TTm.engine.createSession(lesson(['abc']), {});
+    // Same wrong char, same position, 20ms apart: one mistake.
+    var t = 1000;
+    for (var i = 0; i < 40; i++) {
+      s = TTm.engine.reduce(s, { type: 'INPUT', char: 'q', t: t }).state;
+      t += 20;
+    }
+    eq(s.errorKeystrokes, 1, 'forty repeats, one error');
+    eq(s.perCharErrors.a, 1);
+  });
+
+  add('engine: an explicit repeat flag is never counted', function () {
+    var s = TTm.engine.createSession(lesson(['abc']), {});
+    var r = TTm.engine.reduce(s, { type: 'INPUT', char: 'q', t: 1000, repeat: true });
+    eq(r.state.errorKeystrokes, 0);
+    eq(r.events[r.events.length - 1].counted, false, 'the UI still flashes');
+  });
+
+  add('engine: repeats further apart than the guard window are real mistakes', function () {
+    var s = TTm.engine.createSession(lesson(['abc']), {});
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'q', t: 1000 }).state;
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'q', t: 1500 }).state;
+    eq(s.errorKeystrokes, 2);
+  });
+
+  add('engine: the cursor invariant holds under a few thousand random keys', function () {
+    var rand = rng(20260917);
+    var alphabet = 'abcdefg \n(){};'.split('');
+    var s = TTm.engine.createSession(
+      lesson(['def f(x):', '    return x + 1', 'print(f(2))'],
+             { requireEnter: true, mode: 'code' }),
+      { autoIndent: true, requireEnter: true }
+    );
+    var t = 0;
+    for (var i = 0; i < 4000 && s.status !== 'finished'; i++) {
+      var ch = rand() < 0.5
+        ? TTm.engine.currentChar(s)          // bias toward progress
+        : alphabet[Math.floor(rand() * alphabet.length)];
+      if (ch === null) break;
+      t += 10 + Math.floor(rand() * 40);
+      s = TTm.engine.reduce(s, { type: 'INPUT', char: ch, t: t }).state;
+
+      var target = TTm.engine.currentTarget(s);
+      eq(s.cursor, s.indentEnd + s.lineCorrect,
+         'invariant broke at iteration ' + i);
+      ok(s.cursor <= target.length, 'cursor ran past the line at iteration ' + i);
+      ok(s.lineIndex < s.lines.length, 'line index in range at iteration ' + i);
+    }
+    eq(s.status, 'finished', 'the biased walk should complete the lesson');
+  });
+
+  /* ======================================================================
+     engine: error attribution
+     ====================================================================== */
+
+  add('engine: a miss is tallied against the expected char, not the pressed one', function () {
+    var s = TTm.engine.createSession(lesson([';a']), {});
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'l', t: 1000 }).state;
+    eq(s.perCharErrors[';'], 1, 'the semicolon is what you missed');
+    eq(s.perCharErrors.l, undefined, 'the key you hit is not blamed');
+    eq(s.confusions[';|l'], 1, 'the confusion pair is recorded');
+  });
+
+  add('engine: correct keystrokes accumulate per-character hits', function () {
+    var s = TTm.engine.createSession(lesson(['aab']), {});
+    s = type(s, 'aab');
+    eq(s.perCharHits.a, 2);
+    eq(s.perCharHits.b, 1);
+  });
+
+  /* ======================================================================
+     engine: indentation
+     ====================================================================== */
+
+  add('engine: auto-indent starts the cursor past the supplied whitespace', function () {
+    var s = TTm.engine.createSession(
+      lesson(['    return a + b'], { mode: 'code' }),
+      { autoIndent: true }
+    );
+    eq(s.cursor, 4, 'cursor begins past the indent');
+    eq(s.indentEnd, 4);
+    eq(s.autoSuppliedTotal, 4);
+    s = type(s, 'return a + b');
+    eq(s.status, 'finished');
+    eq(s.correctChars, 12, 'supplied indentation is not scored');
+    eq(s.perCharHits[' '], 3, 'only the three spaces inside the line count');
+  });
+
+  add('engine: pressing space over supplied indent is forgiven, then compared', function () {
+    var s = TTm.engine.createSession(
+      lesson(['    return x'], { mode: 'code' }),
+      { autoIndent: true }
+    );
+    var t = 1000;
+    for (var i = 0; i < 3; i++) {
+      var r = TTm.engine.reduce(s, { type: 'INPUT', char: ' ', t: t });
+      s = r.state;
+      t += 300;
+      eq(r.events[r.events.length - 1].type, 'ignored', 'press ' + (i + 1) + ' forgiven');
+      eq(s.errorKeystrokes, 0);
+      eq(s.cursor, 4, 'and the cursor does not move');
+    }
+    var r4 = TTm.engine.reduce(s, { type: 'INPUT', char: ' ', t: t });
+    eq(r4.events[r4.events.length - 1].type, 'incorrect',
+       'the fourth press is real feedback');
+    eq(r4.state.errorKeystrokes, 1);
+    eq(r4.state.perCharErrors.r, 1, 'blamed on the r that was wanted');
+  });
+
+  add('engine: with auto-indent off the spaces must actually be typed', function () {
+    var s = TTm.engine.createSession(
+      lesson(['    return x'], { mode: 'code' }),
+      { autoIndent: false }
+    );
+    eq(s.cursor, 0);
+    eq(s.indentEnd, 0);
+    eq(s.autoSuppliedTotal, 0);
+    var r = TTm.engine.reduce(s, { type: 'INPUT', char: 'r', t: 1000 });
+    eq(r.state.errorKeystrokes, 1, 'r is wrong here; a space was wanted');
+    eq(r.state.perCharErrors[' '], 1, 'the miss is attributed to space');
+    s = type(r.state, '    return x', 2000);
+    eq(s.status, 'finished');
+    eq(s.correctChars, 12, 'every character counts when none is supplied');
+  });
+
+  add('engine: indent is recomputed per line, so dedents need no special case', function () {
+    var s = TTm.engine.createSession(
+      lesson(['for x in y:', '    print(x)', 'done'], { mode: 'code' }),
+      { autoIndent: true }
+    );
+    eq(s.indentEnd, 0, 'line 1 is flush left');
+    s = type(s, 'for x in y:');
+    eq(s.lineIndex, 1);
+    eq(s.indentEnd, 4, 'line 2 is indented');
+    eq(s.cursor, 4);
+    s = type(s, 'print(x)');
+    eq(s.lineIndex, 2);
+    eq(s.indentEnd, 0, 'line 3 dedents back');
+    eq(s.cursor, 0);
+  });
+
+  /* ======================================================================
+     engine: Enter and line transitions
+     ====================================================================== */
+
+  add('engine: requireEnter makes the newline a real, attributable character', function () {
+    var s = TTm.engine.createSession(
+      lesson(['ab'], { requireEnter: true }),
+      { requireEnter: true }
+    );
+    eq(TTm.engine.currentTarget(s).length, 3, 'target is the line plus a newline');
+    s = type(s, 'ab');
+    eq(s.status, 'running', 'the line is not done until Enter');
+    eq(TTm.engine.currentChar(s), '\n');
+    var r = TTm.engine.reduce(s, { type: 'INPUT', char: 'x', t: 9000 });
+    eq(r.state.perCharErrors['\n'], 1, 'the miss is attributed to the newline');
+    var done = TTm.engine.reduce(r.state, { type: 'INPUT', char: '\n', t: 9200 });
+    eq(done.state.status, 'finished');
+  });
+
+  add('engine: requireEnter false advances on the last visible character', function () {
+    var s = TTm.engine.createSession(
+      lesson(['ab', 'cd'], { requireEnter: false }),
+      { requireEnter: true }   // the lesson wins; the reach is not taught yet
+    );
+    eq(TTm.engine.currentTarget(s).length, 2);
+    s = type(s, 'ab');
+    eq(s.lineIndex, 1, 'moved on without an Enter');
+    s = type(s, 'cd', 5000);
+    eq(s.status, 'finished');
+  });
+
+  add('engine: finishing the last line completes the session exactly once', function () {
+    var s = TTm.engine.createSession(lesson(['ab', 'cd']), {});
+    s = type(s, 'ab');
+    var r = TTm.engine.reduce(
+      type(s, 'c', 5000), { type: 'INPUT', char: 'd', t: 5200 }
+    );
+    var kinds = r.events.map(function (e) { return e.type; });
+    eq(kinds.filter(function (k) { return k === 'session-complete'; }).length, 1);
+    eq(kinds.filter(function (k) { return k === 'line-complete'; }).length, 1);
+    eq(r.state.lineIndex, 1, 'the line index never runs past the last line');
+  });
+
+  add('engine: input after the session has finished is ignored', function () {
+    var s = type(TTm.engine.createSession(lesson(['a']), {}), 'a');
+    eq(s.status, 'finished');
+    var before = s.endedAt;
+    var r = TTm.engine.reduce(s, { type: 'INPUT', char: 'b', t: 99999 });
+    eq(r.events[0].type, 'ignored');
+    eq(r.state.errorKeystrokes, 0);
+    eq(r.state.endedAt, before, 'and the clock stays stopped');
+  });
+
+  add('engine: empty lines are skipped without spinning', function () {
+    var s = TTm.engine.createSession(
+      lesson(['', '', 'ab', ''], { requireEnter: false }),
+      { requireEnter: false }
+    );
+    eq(s.lineIndex, 2, 'walked past the leading empties');
+    s = type(s, 'ab');
+    eq(s.status, 'finished', 'a trailing empty line ends the session');
+  });
+
+  add('engine: a lesson with nothing to type finishes rather than hanging', function () {
+    var s = TTm.engine.createSession(
+      lesson(['', ''], { requireEnter: false }), { requireEnter: false }
+    );
+    eq(s.status, 'finished');
+  });
+
+  add('engine: backspace moves nothing and is not an error', function () {
+    var s = type(TTm.engine.createSession(lesson(['abc']), {}), 'a');
+    var r = TTm.engine.reduce(s, { type: 'BACKSPACE', t: 5000 });
+    eq(r.state.cursor, 1, 'everything left of the cursor is already correct');
+    eq(r.state.errorKeystrokes, 0);
+    eq(r.events[0].type, 'backspace-ignored', 'but the UI is told, so it can say why');
+  });
+
+  add('engine: paste is refused and reported, not silently dropped', function () {
+    var s = TTm.engine.createSession(lesson(['abc']), {});
+    var r = TTm.engine.reduce(s, { type: 'PASTE', t: 1000 });
+    eq(r.events[0].type, 'paste-blocked');
+    eq(r.state.cursor, 0);
+  });
+
+  add('engine: Caps Lock is suspected after three case-flipped errors', function () {
+    var s = TTm.engine.createSession(lesson(['abc']), {});
+    var t = 1000;
+    ['A', 'A', 'A'].forEach(function (c) {
+      s = TTm.engine.reduce(s, { type: 'INPUT', char: c, t: t }).state;
+      t += 400;
+    });
+    ok(s.capsLockSuspected, 'three flips is a pattern, not a slip');
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'a', t: t }).state;
+    ok(!s.capsLockSuspected, 'cleared by a correctly-cased letter');
+  });
+
+  add('engine: restart returns a clean session with the same policy', function () {
+    var s = TTm.engine.createSession(
+      lesson(['    ab'], { mode: 'code' }), { autoIndent: true }
+    );
+    s = type(s, 'ab');
+    var r = TTm.engine.reduce(s, { type: 'RESTART', t: 9000 });
+    eq(r.state.status, 'idle');
+    eq(r.state.correctChars, 0);
+    eq(r.state.startedAt, null);
+    eq(r.state.cursor, 4, 'auto-indent policy survived the restart');
+  });
+
+  /* ======================================================================
+     metrics
+     ====================================================================== */
+
+  add('metrics: the clock starts on the first keystroke, right or wrong', function () {
+    var s = TTm.engine.createSession(lesson(['abc']), {});
+    eq(s.startedAt, null, 'not on load');
+    eq(TTm.metrics.activeMs(s), 0);
+    var r = TTm.engine.reduce(s, { type: 'INPUT', char: 'z', t: 4321 });
+    eq(r.state.startedAt, 4321, 'a wrong key still starts it');
+  });
+
+  add('metrics: 25 characters in 30 seconds is exactly 10 WPM', function () {
+    var s = TTm.engine.createSession(
+      lesson(['abcdefghijklmnopqrstuvwxy'], { requireEnter: false }),
+      { requireEnter: false }
+    );
+    s = type(s, 'abcdefghijklmnopqrstuvwxy', 0, 1250);
+    eq(s.correctChars, 25);
+    eq(s.status, 'finished');
+    eq(s.endedAt, 30000, 'the clock stops on the final keystroke, not at render');
+    eq(TTm.metrics.activeMs(s), 30000);
+    near(TTm.metrics.wpm(s), 10, 1e-9);
+  });
+
+  add('metrics: a ten-second gap costs seven, with three seconds of grace', function () {
+    var s = TTm.engine.createSession(lesson(['abcdef']), {});
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'a', t: 0 }).state;
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'b', t: 10000 }).state;
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'c', t: 10100 }).state;
+    eq(s.idleDeductedMs, 7000);
+    eq(TTm.metrics.activeMs(s), 3100);
+  });
+
+  add('metrics: blurring away deducts the whole absence', function () {
+    var s = TTm.engine.createSession(lesson(['abcdef']), {});
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'a', t: 0 }).state;
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'b', t: 100 }).state;
+    s = TTm.engine.reduce(s, { type: 'BLUR', t: 200 }).state;
+    s = TTm.engine.reduce(s, { type: 'FOCUS', t: 60200 }).state;
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'c', t: 60300 }).state;
+    eq(s.idleDeductedMs, 60000, 'the absence is deducted once, not twice');
+    eq(TTm.metrics.activeMs(s), 300);
+  });
+
+  add('metrics: a live reading does not inflate while the learner stares', function () {
+    var s = TTm.engine.createSession(lesson(['abcdef']), {});
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'a', t: 0 }).state;
+    // 30s later, still running, nothing typed since.
+    eq(TTm.metrics.activeMs(s, 30000), 3000, 'only the grace period accrues');
+  });
+
+  add('metrics: zero elapsed gives zero WPM, never Infinity', function () {
+    var s = TTm.engine.createSession(lesson(['abc']), {});
+    eq(TTm.metrics.wpm(s), 0);
+    var r = TTm.engine.reduce(s, { type: 'INPUT', char: 'a', t: 500 });
+    eq(TTm.metrics.activeMs(r.state), 0, 'one keystroke spans no time');
+    eq(TTm.metrics.wpm(r.state), 0);
+    ok(isFinite(TTm.metrics.wpm(r.state)));
+  });
+
+  add('metrics: accuracy is null before anything is typed, and renders as a dash', function () {
+    var s = TTm.engine.createSession(lesson(['abc']), {});
+    eq(TTm.metrics.accuracy(s), null, 'null, not NaN');
+    eq(TTm.metrics.formatAccuracy(TTm.metrics.accuracy(s)), '—');
+    eq(TTm.metrics.formatAccuracy(0.9612), '96%');
+    eq(TTm.metrics.formatWpm(0), '0.0');
+  });
+
+  add('metrics: accuracy counts every keystroke, including the corrected ones', function () {
+    var s = TTm.engine.createSession(lesson(['ab']), {});
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'x', t: 0 }).state;
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'a', t: 300 }).state;
+    s = TTm.engine.reduce(s, { type: 'INPUT', char: 'b', t: 600 }).state;
+    near(TTm.metrics.accuracy(s), 2 / 3, 1e-9);
+  });
+
+  add('metrics: summarize reports a code lesson without counting supplied indent', function () {
+    var s = TTm.engine.createSession(
+      lesson(['    return x'], { mode: 'code' }), { autoIndent: true }
+    );
+    s = type(s, 'return x', 0, 1000);
+    var sum = TTm.metrics.summarize(s);
+    eq(sum.correctChars, 8);
+    eq(sum.autoSuppliedChars, 4);
+    ok(sum.finished);
+    eq(sum.lineTimes.length, 1);
+  });
+
+  root.TT_CASES = {
+    cases: cases,
+    assert: { ok: ok, eq: eq, near: near, deepEq: deepEq },
+    helpers: { lesson: lesson, type: type, rng: rng, add: add, TTm: TTm }
+  };
+  if (isNode) module.exports = root.TT_CASES;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
