@@ -93,9 +93,16 @@
 
     if (verdict.passed) {
       rec.cleared = true;
-    } else if (!rec.cleared && rec.attempts >= OVERRIDE_AFTER) {
+    } else if (!rec.cleared && rec.attempts >= OVERRIDE_AFTER &&
+               prereqMet(progress, lesson)) {
       // Nobody gets permanently stuck. This unlocks what follows without
       // pretending the bar was met.
+      //
+      // It is for a learner stuck AT this lesson in sequence, which is why it
+      // requires the prerequisite. A lesson reached by suspending the order
+      // has no position on the ladder to be stuck at, and without that
+      // condition three sloppy finishes on a jumped-to sym-1 would open both
+      // code tracks permanently, without one fundamentals lesson typed.
       rec.cleared = true;
       rec.clearedByOverride = true;
     }
@@ -146,6 +153,13 @@
 
   function isUnlocked(progress, lesson, settings) {
     if (!lesson) return false;
+    // A lesson already cleared is always startable again. Before the order
+    // could be suspended this went without saying: you could only clear what
+    // you could start, so cleared implied the prerequisite held. That no
+    // longer follows, and without this line a lesson passed out of order
+    // reads as LOCKED the moment the order is restored — locked against a
+    // bar the same row is reporting a personal best for, and unreplayable.
+    if (isCleared(progress, lesson.id)) return true;
     return prereqMet(progress, lesson) || unlockAllOn(progress, settings);
   }
 
@@ -161,7 +175,9 @@
   function lessonState(progress, lesson, lessonsIndex, settings) {
     var rec = recordFor(progress, lesson.id);
     var met = prereqMet(progress, lesson);
-    var unlocked = met || unlockAllOn(progress, settings);
+    // Through isUnlocked, never by restating the rule here: a second copy of
+    // it is how the card and the launcher come to disagree.
+    var unlocked = isUnlocked(progress, lesson, settings);
 
     var bar = '';
     if (!met) {

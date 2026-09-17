@@ -310,14 +310,15 @@ const browser = await chromium.launch();
     })));
 
   // That switch is also on this screen, which is where the locks are met.
-  const opener = await page.$('#screen .notice button');
+  const opener = await page.$('#screen .notice button:has-text("Open every lesson")');
   check('the track screen offers it too', !!opener);
   await opener.click();
   await page.waitForTimeout(250);
   check('nothing in the track is left locked',
     (await page.$$('#screen .card[disabled]')).length === 0);
   check('and the list still shows what the order would have been',
-    (await page.$$eval('#screen .badge-open', (ns) => ns.length)) === 10);
+    (await page.$$eval('#screen .badge-open', (ns) => ns.length)) ===
+    (await page.$$('#screen .card')).length);
 
   await page.evaluate(() => { location.hash = '#/lesson/py-idioms'; });
   await page.waitForTimeout(350);
@@ -342,7 +343,7 @@ const browser = await chromium.launch();
   // And it goes back. The notice carries the way out from any screen.
   await page.evaluate(() => { location.hash = '#/'; });
   await page.waitForTimeout(300);
-  const restore = await page.$('#screen .notice button');
+  const restore = await page.$('#screen .notice button:has-text("Restore the order")');
   check('the home screen says the order is suspended', !!restore);
   await restore.click();
   await page.waitForTimeout(250);
@@ -350,7 +351,58 @@ const browser = await chromium.launch();
   await page.waitForTimeout(300);
   check('and the gate comes back',
     (await page.$$('#screen .card[disabled]')).length === 10);
+  check('with no lesson still claiming to be out of order',
+    (await page.$$('#screen .badge-open')).length === 0);
   check('no unexpected page errors', errors.length === 0, errors.join(' | '));
+  await page.close();
+}
+
+/* ── a lesson passed out of order stays yours ─────────────────────────── */
+{
+  const page = await browser.newPage();
+  // home-2 cleared while home-1 is not: a state only this feature can produce.
+  await page.addInitScript(() => {
+    localStorage.setItem('tt:progress', JSON.stringify({
+      version: 2, updatedAt: 1,
+      lessons: {
+        'home-2': {
+          cleared: true, clearedByOverride: false, attempts: 1, bestWpm: 41.5,
+          bestAccuracy: 1, lastWpm: 41.5, lastAt: 1, totalMs: 60000
+        }
+      },
+      settings: {
+        themeId: 'algocratic', layoutId: 'us', autoIndent: true,
+        requireEnter: true, reduceMotion: null, fontScale: 1, sound: false,
+        announceErrors: false, showKeyboard: true, unlockAll: false,
+        observedLayouts: {}
+      },
+      keyStats: {}, confusions: {},
+      totals: { sessions: 1, charsTyped: 80, activeMs: 60000 }
+    }));
+  });
+  await page.goto(PAGE);
+  await page.evaluate(() => { location.hash = '#/track/fundamentals'; });
+  await page.waitForTimeout(350);
+
+  const card = await page.$$eval('#screen .card', (ns) => ({
+    disabled: ns[1].disabled,
+    badges: [...ns[1].querySelectorAll('.badge')].map((b) => b.textContent),
+    label: ns[1].getAttribute('aria-label')
+  }));
+  check('a lesson passed out of order is not locked once the order returns',
+    card.disabled === false, JSON.stringify(card));
+  check('it still reads as cleared',
+    card.badges.indexOf('CLEARED') !== -1, JSON.stringify(card.badges));
+  check('and still says it was taken out of order',
+    card.badges.indexOf('OUT OF ORDER') !== -1, JSON.stringify(card.badges));
+  check('nothing tells the learner to clear a lesson they have already passed',
+    !/Locked/.test(card.label), card.label);
+
+  const cards = await page.$$('#screen .card');
+  await cards[1].click();
+  await page.waitForTimeout(350);
+  check('and it can be typed again',
+    (await page.textContent('#screen h1')) === 'Outward: D K S L');
   await page.close();
 }
 

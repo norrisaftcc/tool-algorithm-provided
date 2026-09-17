@@ -112,8 +112,8 @@ A held wrong key collapses into one error; the screen still flashes each time.
 ### Starting anywhere
 
 Each lesson opens when the one before it is cleared, and three finished
-attempts open the next one regardless of score, so nobody is walled in by a
-target they cannot hit.
+attempts on a lesson reached in sequence open the next one regardless of score,
+so nobody is walled in by a target they cannot hit.
 
 That ladder is right for a learner and wrong for two other people: someone
 reviewing the C++ track, who would otherwise have to clear twenty-one
@@ -124,7 +124,24 @@ is where the question actually comes up.
 
 It gates what may be *started* and nothing else. The targets do not move, a
 cleared lesson is still one whose targets were met, and switching it back off
-restores the ladder with whatever was genuinely cleared still cleared. The
+restores the ladder with whatever was genuinely cleared still cleared.
+
+Two rules follow from that, and both are stated here because both were bugs
+first:
+
+- **A lesson you have cleared is always startable again**, whatever the order
+  says. Before the order could be suspended this went without saying — you
+  could only clear what you could start, so cleared implied the prerequisite
+  held. Without it, a lesson passed out of order comes back `LOCKED` the moment
+  the order is restored, unreplayable, and locked against a target the same
+  card is reporting a personal best for.
+- **The three-attempts escape hatch requires the prerequisite.** It exists for
+  a learner stuck *at* a lesson in sequence. A lesson reached by suspending the
+  order has no position on the ladder to be stuck at, and without that
+  condition three sloppy finishes on `sym-1` would open both code tracks
+  permanently, with no fundamentals lesson typed.
+
+The
 lesson list keeps saying what the order would have been — an `OUT OF ORDER`
 badge, and the prerequisite spelled out in the card's accessible name — so the
 progression stays legible while it is bypassed.

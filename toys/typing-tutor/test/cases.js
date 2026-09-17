@@ -1242,7 +1242,8 @@
     var late = TTm.lessons.get('py-idioms');
     eq(TTm.progress.isUnlocked(p, late), false);
     p.settings.unlockAll = true;
-    eq(TTm.progress.isUnlocked(p, late), true, 'the store keeps the two in step');
+    eq(TTm.progress.isUnlocked(p, late), true,
+      'falls back to the settings the blob itself carries');
     eq(TTm.progress.isUnlocked(p, late, { unlockAll: false }), false,
       'and an explicit argument still wins, which is how the list asks ' +
       'what the rule alone says');
@@ -1279,13 +1280,77 @@
     eq(TTm.progress.isCleared(p, 'cpp-io'), true, 'still cleared afterwards');
     eq(TTm.progress.isUnlocked(p, TTm.lessons.get('cpp-loops')), true,
       'and what it unlocks is open by the ordinary rule');
-    eq(TTm.progress.isUnlocked(p, TTm.lessons.get('cpp-io')), false,
+    eq(TTm.progress.isUnlocked(p, TTm.lessons.get('cpp-io')), true,
+      'the lesson itself stays startable — it was passed, not skipped');
+    eq(TTm.progress.isUnlocked(p, TTm.lessons.get('cpp-main')), false,
       'while the lessons it was jumped over are gated again');
     eq(TTm.progress.isCleared(p, 'cpp-main'), false, 'and remain uncleared');
 
     var st = TTm.progress.lessonState(p, jumped, TTm.lessons, open);
     eq(st.cleared, true);
     eq(st.bypassed, true, 'the card can show both at once');
+  });
+
+  add('progress: a lesson you passed is never locked against you afterwards', function () {
+    // The invariant this feature broke: before the order could be suspended,
+    // cleared implied the prerequisite held, because you could only clear what
+    // you could start. A lesson passed out of order used to come back LOCKED
+    // the moment the order was restored — unreplayable, and shown as locked
+    // against a target the same card reported a personal best for.
+    var p = TTm.storage.defaults();
+    p.settings.unlockAll = true;
+    var jumped = TTm.lessons.get('home-2');
+    p = TTm.progress.recordResult(p, jumped, {
+      finished: true, skippedLines: 0, wpm: 80, accuracy: 1, activeMs: 1000,
+      correctChars: 80, errorKeystrokes: 0,
+      perCharHits: {}, perCharErrors: {}, confusions: {}
+    }, 1).progress;
+    p.settings.unlockAll = false;
+
+    var st = TTm.progress.lessonState(p, jumped, TTm.lessons, p.settings);
+    eq(st.cleared, true);
+    eq(st.unlocked, true, 'still startable');
+    eq(st.lockReason, '', 'and nothing claims otherwise in words either');
+    eq(st.gated, true, 'the ladder is honest about where it sits');
+    eq(st.bypassed, true, 'so the card can still say it was taken early');
+    ok(st.bestWpm > 0, 'the recorded best is the whole reason this matters');
+  });
+
+  add('progress: the escape hatch does not compose with the bypass', function () {
+    // Three finished attempts open what follows regardless of score, so nobody
+    // is walled in by a target they cannot hit. That is for someone stuck AT a
+    // lesson in sequence. Reached by suspending the order, it would otherwise
+    // open both code tracks off three sloppy runs of one jumped-to lesson,
+    // without a single fundamentals lesson typed.
+    var sloppy = {
+      finished: true, skippedLines: 0, wpm: 1, accuracy: 0.2, activeMs: 1000,
+      correctChars: 10, errorKeystrokes: 40,
+      perCharHits: {}, perCharErrors: {}, confusions: {}
+    };
+    var p = TTm.storage.defaults();
+    p.settings.unlockAll = true;
+    var last = TTm.lessons.get('sym-1');
+    for (var i = 0; i < 4; i++) {
+      p = TTm.progress.recordResult(p, last, sloppy, i).progress;
+    }
+    eq(p.lessons['sym-1'].attempts, 4, 'the attempts were all recorded');
+    eq(TTm.progress.isCleared(p, 'sym-1'), false, 'but none of them cleared it');
+
+    p.settings.unlockAll = false;
+    eq(TTm.progress.isUnlocked(p, TTm.lessons.get('cpp-include'), p.settings),
+      false, 'so the C++ track did not open behind it');
+    eq(TTm.progress.isUnlocked(p, TTm.lessons.get('py-imports'), p.settings),
+      false, 'nor the Python track');
+
+    // In sequence it works exactly as before.
+    var q = TTm.storage.defaults();
+    var first = TTm.lessons.get('home-1');
+    eq(TTm.progress.prereqMet(q, first), true, 'nothing gates the first lesson');
+    for (var j = 0; j < 3; j++) {
+      q = TTm.progress.recordResult(q, first, sloppy, j).progress;
+    }
+    eq(TTm.progress.isCleared(q, 'home-1'), true, 'still opens after three');
+    eq(q.lessons['home-1'].clearedByOverride, true, 'and is still labelled so');
   });
 
   add('progress: the suggested next lesson follows the same rule', function () {
