@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="algocratic">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KEYSTROKE COMPLIANCE TERMINAL</title>
+  <meta name="description" content="A retro typing tutor: home keys, then real Python and C++ lines.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>%E2%8C%A8</text></svg>">
+  <link rel="stylesheet" href="style.css">
+  <!--
+    Pre-paint bootstrap. Reads the persisted settings before first paint so the
+    chosen theme, motion override and font scale never flash the default.
+    Deliberately inline, deliberately tiny, deliberately wrapped in try/catch:
+    localStorage throws outright on file:// in some browsers.
+  -->
+  <script>
+    (function () {
+      var d = document.documentElement;
+      try {
+        var raw = localStorage.getItem('tt:progress');
+        if (!raw) return;
+        var s = (JSON.parse(raw) || {}).settings || {};
+        if (s.themeId) d.setAttribute('data-theme', s.themeId);
+        if (s.reduceMotion === true) d.setAttribute('data-motion', 'off');
+        if (s.reduceMotion === false) d.setAttribute('data-motion', 'on');
+        if (s.fontScale) d.style.setProperty('--font-scale', String(s.fontScale));
+      } catch (e) { /* no persistence here; defaults stand */ }
+    })();
+  </script>
+</head>
+<body>
+  <div class="scanlines" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#/">
+      <span class="brand-mark" aria-hidden="true">&#9000;</span>
+      <span class="brand-text">KEYSTROKE COMPLIANCE</span>
+    </a>
+    <nav class="topbar-nav" aria-label="Main">
+      <a class="navlink" href="#/">Tracks</a>
+      <a class="navlink" href="#/stats">Stats</a>
+      <a class="navlink" href="#/settings">Settings</a>
+    </nav>
+  </header>
+
+  <main id="screen" class="container" tabindex="-1">
+    <!-- Static mockup, replaced by view.js once it loads. -->
+    <noscript>
+      <p class="notice">This tutor needs JavaScript. It runs entirely in your
+        browser and sends nothing anywhere.</p>
+    </noscript>
+  </main>
+
+  <footer class="footer">
+    <span>Runs offline. Stores nothing but your own progress, on this device.</span>
+  </footer>
+
+  <!-- Polite announcements: line changes, completion, Caps Lock. Never per keystroke. -->
+  <div id="live" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- Classic scripts, ordered by dependency. `defer` preserves document order
+       and, unlike type="module", works when this page is opened from file://. -->
+  <script defer src="src/theme.js"></script>
+  <script defer src="app.js"></script>
+</body>
+</html>
