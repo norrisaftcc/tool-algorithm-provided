@@ -700,6 +700,163 @@
     });
   });
 
+  /* ======================================================================
+     layouts, keyboard projection and drills
+     ====================================================================== */
+
+  var layoutsM = req('layouts');
+  var keyboardM = req('keyboard');
+
+  add('layouts: a character resolves to a key, a level and a finger', function () {
+    var r = layoutsM.createResolver('us', null);
+    deepEq(r.resolve('f'), { code: 'KeyF', level: 'base', finger: 'index', hand: 'left' });
+    deepEq(r.resolve('{'), { code: 'BracketLeft', level: 'shift', finger: 'pinky', hand: 'right' });
+    eq(r.resolve('é'), null, 'an unmapped character resolves to nothing');
+  });
+
+  add('layouts: shift is the opposite hand, which is the technique worth teaching', function () {
+    eq(layoutsM.shiftKeyFor('right'), 'ShiftLeft');
+    eq(layoutsM.shiftKeyFor('left'), 'ShiftRight');
+    eq(layoutsM.shiftKeyFor('both'), null);
+  });
+
+  add('layouts: a shifted character reported without its modifier is not taken as a base key', function () {
+    // Some synthetic and on-screen keyboards report key=":" with shiftKey
+    // false. Believing that would relabel the semicolon keycap.
+    var r = layoutsM.createResolver('us', null);
+    r.observe('Semicolon', ':', false);
+    eq(r.keyLabel('Semicolon'), ';', 'the keycap still reads semicolon');
+    deepEq(r.resolve(':'), { code: 'Semicolon', level: 'shift', finger: 'pinky', hand: 'right' });
+
+    r.observe('KeyA', 'A', false);
+    eq(r.keyLabel('KeyA'), 'A', 'letters print uppercase either way');
+    eq(r.resolve('a').code, 'KeyA', 'and lowercase a still resolves');
+  });
+
+  add('layouts: a genuine observation overrides the table', function () {
+    var r = layoutsM.createResolver('us', null);
+    eq(r.resolve('q').code, 'KeyQ');
+    r.observe('KeyA', 'q', false);      // as on AZERTY
+    eq(r.resolve('q').code, 'KeyA', 'what the keyboard actually does wins');
+    eq(r.keyLabel('KeyA'), 'Q');
+  });
+
+  add('keyboard: heat buckets treat a barely-touched key as unmeasured', function () {
+    eq(keyboardM.heatBucket(4, 1), 'none', 'five attempts prove nothing');
+    eq(keyboardM.heatBucket(200, 0), 0);
+    eq(keyboardM.heatBucket(50, 50), 5);
+    ok(keyboardM.heatBucket(90, 10) > keyboardM.heatBucket(97, 3),
+       'a worse miss rate is a hotter bucket');
+  });
+
+  add('drills: worst keys ignore anything too rarely seen to judge', function () {
+    var stats = {
+      ';': { hit: 100, miss: 40 },   // 28.6%
+      'a': { hit: 900, miss: 5 },    // 0.6%
+      'b': { hit: 2, miss: 2 },      // 50% but only 4 attempts
+      'c': { hit: 50, miss: 0 }      // never missed
+    };
+    var worst = TTm.drills.worstKeys(stats);
+    eq(worst.length, 2, 'only the two with both evidence and misses');
+    eq(worst[0].char, ';');
+    eq(worst[1].char, 'a');
+  });
+
+  add('drills: the same statistics always produce the same drill', function () {
+    var stats = { ';': { hit: 100, miss: 40 }, '{': { hit: 60, miss: 17 } };
+    var a = TTm.drills.buildDrillLesson(stats, { seed: 7 });
+    var b = TTm.drills.buildDrillLesson(stats, { seed: 7 });
+    deepEq(a.lines, b.lines, 'practice must not reshuffle itself');
+    ok(a.lines.length > 0);
+    a.lines.forEach(function (line) {
+      ok(line.length <= 72, 'drill line within the length limit');
+      ok(line.indexOf('\t') === -1, 'no tabs in generated content');
+    });
+  });
+
+  add('drills: space is never drilled as a glyph however often it is missed', function () {
+    var lesson = TTm.drills.buildDrillLesson({
+      ' ': { hit: 100, miss: 80 }, ';': { hit: 100, miss: 30 }
+    }, { seed: 1 });
+    eq(lesson.drillChars.indexOf(' '), -1, 'space excluded from drill characters');
+  });
+
+  add('drills: no evidence produces no drill, rather than a fake one', function () {
+    eq(TTm.drills.buildDrillLesson({}, {}), null);
+    eq(TTm.drills.buildDrillLesson({ a: { hit: 3, miss: 1 } }, {}), null);
+  });
+
+  /* ======================================================================
+     progression
+     ====================================================================== */
+
+  add('progress: a lesson clears only when both targets are met', function () {
+    var lesson = { id: 'x', targetWpm: 20, targetAccuracy: 0.95 };
+    eq(TTm.progress.evaluate(lesson, {
+      finished: true, skippedLines: 0, wpm: 25, accuracy: 0.97
+    }).passed, true);
+    var slow = TTm.progress.evaluate(lesson, {
+      finished: true, skippedLines: 0, wpm: 12, accuracy: 0.99
+    });
+    eq(slow.passed, false);
+    ok(slow.reasons.join(' ').indexOf('speed') !== -1, 'and says which target');
+    eq(TTm.progress.evaluate(lesson, {
+      finished: true, skippedLines: 2, wpm: 30, accuracy: 0.99
+    }).passed, false, 'skipping lines is practice, not a score');
+  });
+
+  add('progress: three finished attempts unlock what follows without faking the score', function () {
+    var lesson = { id: 'x', targetWpm: 40, targetAccuracy: 0.99 };
+    var p = TTm.storage.defaults();
+    var summary = {
+      finished: true, skippedLines: 0, wpm: 10, accuracy: 0.8,
+      activeMs: 1000, correctChars: 50, errorKeystrokes: 12,
+      perCharHits: {}, perCharErrors: {}, confusions: {}
+    };
+    for (var i = 0; i < 2; i++) p = TTm.progress.recordResult(p, lesson, summary, i).progress;
+    eq(TTm.progress.isCleared(p, 'x'), false, 'not after two');
+    p = TTm.progress.recordResult(p, lesson, summary, 3).progress;
+    eq(TTm.progress.isCleared(p, 'x'), true, 'open after three');
+    eq(p.lessons.x.clearedByOverride, true, 'and honestly labelled');
+    near(p.lessons.x.bestWpm, 10, 1e-9, 'the recorded best is not inflated');
+  });
+
+  add('progress: a run with skipped lines never moves the recorded best', function () {
+    var lesson = { id: 'x', targetWpm: 1, targetAccuracy: 0.1 };
+    var p = TTm.storage.defaults();
+    var base = {
+      finished: true, skippedLines: 0, wpm: 30, accuracy: 0.99, activeMs: 1000,
+      correctChars: 10, errorKeystrokes: 0,
+      perCharHits: {}, perCharErrors: {}, confusions: {}
+    };
+    p = TTm.progress.recordResult(p, lesson, base, 1).progress;
+    near(p.lessons.x.bestWpm, 30, 1e-9);
+    var cheated = Object.assign({}, base, { wpm: 400, skippedLines: 3 });
+    p = TTm.progress.recordResult(p, lesson, cheated, 2).progress;
+    near(p.lessons.x.bestWpm, 30, 1e-9, 'the skipped run did not count');
+  });
+
+  add('progress: key stats fold in keyed by the character that was wanted', function () {
+    var lesson = { id: 'x', targetWpm: 1, targetAccuracy: 0.1 };
+    var p = TTm.storage.defaults();
+    p = TTm.progress.recordResult(p, lesson, {
+      finished: true, skippedLines: 0, wpm: 10, accuracy: 0.9, activeMs: 100,
+      correctChars: 5, errorKeystrokes: 1,
+      perCharHits: { ';': 4 }, perCharErrors: { ';': 1 }, confusions: { ';|l': 1 }
+    }, 1).progress;
+    deepEq(p.keyStats[';'], { hit: 4, miss: 1 });
+    eq(p.confusions[';|l'], 1);
+  });
+
+  add('progress: a lock explains itself in words, not with a padlock alone', function () {
+    var p = TTm.storage.defaults();
+    var lesson = TTm.lessons.get('home-2');
+    var st = TTm.progress.lessonState(p, lesson, TTm.lessons);
+    eq(st.unlocked, false);
+    ok(st.lockReason.indexOf('Anchors') !== -1, 'names the blocking lesson');
+    ok(/\d+%/.test(st.lockReason), 'and the bar to clear it');
+  });
+
   root.TT_CASES = {
     cases: cases,
     assert: { ok: ok, eq: eq, near: near, deepEq: deepEq },

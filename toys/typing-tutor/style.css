@@ -523,15 +523,18 @@ h3 { font-size: 14px; }
   75% { transform: translateX(3px); }
 }
 
-/* Whitespace made visible without changing what gets typed. */
-.char-space::before {
+/* Whitespace made visible, but only where it carries information: the
+   supplied indent you need to know exists, and the cursor when it is sitting
+   on a space. Dotting every space turns a typed line into confetti. */
+.char-supplied.char-space::before,
+.char-current.char-space::before {
   content: '\00B7';
   position: absolute;
   inset: 0;
-  color: var(--fg-faint);
   pointer-events: none;
   text-align: center;
 }
+.char-supplied.char-space::before { color: var(--fg-faint); }
 .char-current.char-space::before { color: var(--accent-ink); }
 .char-newline {
   color: var(--fg-faint);

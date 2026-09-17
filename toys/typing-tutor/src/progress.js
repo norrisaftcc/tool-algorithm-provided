@@ -1,0 +1,196 @@
+/* progress.js — unlock rules and clear thresholds. Pure.
+ *
+ * Two numbers gate a lesson: speed and accuracy, both from metrics.js. A
+ * lesson is cleared only when both clear their targets on a run with no
+ * skipped lines.
+ *
+ * An escape hatch matters more than a clean rule here. A learner who cannot
+ * hit 95% on the pinky lesson must not be walled out of the rest of the
+ * course, so a third completed attempt unlocks what follows and is recorded
+ * as an override — it never touches the recorded bests, and the lesson list
+ * shows the difference.
+ */
+(function (root) {
+  'use strict';
+
+  /** Completed attempts after which a lesson unlocks regardless of score. */
+  var OVERRIDE_AFTER = 3;
+
+  function emptyRecord() {
+    return {
+      cleared: false,
+      clearedByOverride: false,
+      attempts: 0,
+      bestWpm: 0,
+      bestAccuracy: 0,
+      lastWpm: 0,
+      lastAt: 0,
+      totalMs: 0
+    };
+  }
+
+  function recordFor(progress, lessonId) {
+    var r = progress && progress.lessons ? progress.lessons[lessonId] : null;
+    return r || emptyRecord();
+  }
+
+  /**
+   * Did this run meet the lesson's bar?
+   * @returns {{passed: boolean, reasons: string[]}}
+   */
+  function evaluate(lesson, summary) {
+    var reasons = [];
+    if (!summary.finished) reasons.push('the lesson was not finished');
+    if (summary.skippedLines > 0) {
+      reasons.push(summary.skippedLines + ' line(s) were skipped');
+    }
+    var acc = summary.accuracy;
+    if (acc === null || acc < lesson.targetAccuracy) {
+      reasons.push('accuracy below ' + Math.round(lesson.targetAccuracy * 100) + '%');
+    }
+    if (summary.wpm < lesson.targetWpm) {
+      reasons.push('speed below ' + lesson.targetWpm + ' wpm');
+    }
+    return { passed: reasons.length === 0, reasons: reasons };
+  }
+
+  /**
+   * Fold a finished run into the stored progress. Returns a NEW progress
+   * object; the caller persists it.
+   */
+  function recordResult(progress, lesson, summary, now) {
+    var next = Object.assign({}, progress);
+    next.lessons = Object.assign({}, progress.lessons);
+    next.keyStats = Object.assign({}, progress.keyStats);
+    next.confusions = Object.assign({}, progress.confusions);
+    next.totals = Object.assign({}, progress.totals);
+
+    var prev = recordFor(progress, lesson.id);
+    var verdict = evaluate(lesson, summary);
+    var rec = Object.assign({}, prev);
+
+    if (summary.finished) rec.attempts = prev.attempts + 1;
+    rec.lastWpm = summary.wpm;
+    rec.lastAt = now;
+    rec.totalMs = prev.totalMs + summary.activeMs;
+
+    // Bests only move on a clean run. A run with skipped lines is practice,
+    // not a score.
+    if (summary.finished && summary.skippedLines === 0) {
+      if (summary.wpm > rec.bestWpm) rec.bestWpm = summary.wpm;
+      if (summary.accuracy !== null && summary.accuracy > rec.bestAccuracy) {
+        rec.bestAccuracy = summary.accuracy;
+      }
+    }
+
+    if (verdict.passed) {
+      rec.cleared = true;
+    } else if (!rec.cleared && rec.attempts >= OVERRIDE_AFTER) {
+      // Nobody gets permanently stuck. This unlocks what follows without
+      // pretending the bar was met.
+      rec.cleared = true;
+      rec.clearedByOverride = true;
+    }
+
+    next.lessons[lesson.id] = rec;
+
+    // Per-character tallies, keyed by the character that was wanted.
+    Object.keys(summary.perCharHits).forEach(function (ch) {
+      var k = next.keyStats[ch] || { hit: 0, miss: 0 };
+      next.keyStats[ch] = { hit: k.hit + summary.perCharHits[ch], miss: k.miss };
+    });
+    Object.keys(summary.perCharErrors).forEach(function (ch) {
+      var k = next.keyStats[ch] || { hit: 0, miss: 0 };
+      next.keyStats[ch] = { hit: k.hit, miss: k.miss + summary.perCharErrors[ch] };
+    });
+    Object.keys(summary.confusions).forEach(function (pair) {
+      next.confusions[pair] = (next.confusions[pair] || 0) + summary.confusions[pair];
+    });
+
+    next.totals.sessions += summary.finished ? 1 : 0;
+    next.totals.charsTyped += summary.correctChars;
+    next.totals.activeMs += summary.activeMs;
+
+    return { progress: next, verdict: verdict, record: rec };
+  }
+
+  function isCleared(progress, lessonId) {
+    return recordFor(progress, lessonId).cleared === true;
+  }
+
+  function isUnlocked(progress, lesson) {
+    if (!lesson) return false;
+    if (!lesson.prereq) return true;
+    return isCleared(progress, lesson.prereq);
+  }
+
+  /**
+   * Everything a lesson card needs, including the sentence that explains a
+   * lock. A padlock glyph on its own tells a screen-reader user nothing.
+   */
+  function lessonState(progress, lesson, lessonsIndex) {
+    var rec = recordFor(progress, lesson.id);
+    var unlocked = isUnlocked(progress, lesson);
+    var reason = '';
+    if (!unlocked) {
+      var pre = lessonsIndex ? lessonsIndex.get(lesson.prereq) : null;
+      reason = pre
+        ? 'Locked — clear "' + pre.title + '" at ' +
+          Math.round(pre.targetAccuracy * 100) + '% accuracy and ' +
+          pre.targetWpm + ' wpm to unlock.'
+        : 'Locked.';
+    }
+    return {
+      id: lesson.id,
+      unlocked: unlocked,
+      cleared: rec.cleared,
+      byOverride: rec.clearedByOverride,
+      attempts: rec.attempts,
+      bestWpm: rec.bestWpm,
+      bestAccuracy: rec.bestAccuracy,
+      lockReason: reason
+    };
+  }
+
+  /** The first unlocked, uncleared lesson — what the home screen suggests. */
+  function nextLesson(progress, lessonList) {
+    for (var i = 0; i < lessonList.length; i++) {
+      var l = lessonList[i];
+      if (isUnlocked(progress, l) && !isCleared(progress, l.id)) return l;
+    }
+    return null;
+  }
+
+  function trackSummary(progress, lessonList) {
+    var cleared = 0, best = 0, attempted = 0;
+    lessonList.forEach(function (l) {
+      var r = recordFor(progress, l.id);
+      if (r.cleared) cleared++;
+      if (r.attempts > 0) attempted++;
+      if (r.bestWpm > best) best = r.bestWpm;
+    });
+    return {
+      total: lessonList.length,
+      cleared: cleared,
+      attempted: attempted,
+      bestWpm: best
+    };
+  }
+
+  var progressApi = {
+    OVERRIDE_AFTER: OVERRIDE_AFTER,
+    emptyRecord: emptyRecord,
+    recordFor: recordFor,
+    evaluate: evaluate,
+    recordResult: recordResult,
+    isCleared: isCleared,
+    isUnlocked: isUnlocked,
+    lessonState: lessonState,
+    nextLesson: nextLesson,
+    trackSummary: trackSummary
+  };
+
+  root.TT = root.TT || {};
+  root.TT.progress = progressApi;
+  if (typeof module !== 'undefined' && module.exports) module.exports = progressApi;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
