@@ -14,9 +14,11 @@
  *      corrects itself after a few dozen keystrokes on any browser. Persisted.
  *   3. A hand-written table, picked in settings.
  *
- * Only `us` and `uk` ship as tables. Writing AZERTY and QWERTZ from memory
- * would mean shipping plausible-looking wrong answers about which finger to
- * use, so those learners get `auto`, which is sources 1 and 2 alone.
+ * `us` and `uk` were written by hand against physical boards. `fr`, `de` and
+ * `es` were not written from memory at all — memory would mean shipping
+ * plausible-looking wrong answers about which finger to use — but derived
+ * mechanically from the X11 xkb data; see the note above them. Anything else
+ * gets `auto`, which is sources 1 and 2 alone.
  */
 (function (root) {
   'use strict';
@@ -109,8 +111,13 @@
   ];
 
   /* --- character tables ---------------------------------------------------
-   * Each entry is [base, shifted]. Letters are generated rather than typed
-   * out, which removes a whole class of transcription mistake.
+   * Each entry is [base, shifted], or [base, shifted, altgr] where a layout
+   * uses the third level. A null in any slot means the key produces nothing
+   * inside ASCII 32..126 there — a dead key, or an accented letter no lesson
+   * asks for — and the resolver simply skips it.
+   *
+   * Letters on the two QWERTY tables are generated rather than typed out,
+   * which removes a whole class of transcription mistake.
    */
 
   function letterRows(table) {
@@ -148,14 +155,214 @@
     Space: [' ', ' '], Enter: ['\n', '\n']
   });
 
+  /* The three tables below were derived mechanically from the X11 xkb data in
+   * /usr/share/X11/xkb/symbols, not recalled: each layout's `include` chain
+   * was resolved and levels 1, 2 and 3 of every key read off, then everything
+   * outside ASCII 32..126 was dropped, along with every dead key — a dead key
+   * produces no character on its own, so pointing at one would be a lie.
+   *
+   *   FR  symbols/fr  xkb_symbols "basic"   include "latin"
+   *   DE  symbols/de  xkb_symbols "basic"   include "latin(type4)"
+   *   ES  symbols/es  xkb_symbols "basic"   include "latin(type4)"
+   *
+   * IntlBackslash is <LSGT>, the key an ISO board has between left Shift and
+   * Z. de defines it itself; fr and es inherit it from symbols/pc "pc105",
+   * which is where xkb puts it for every layout that does not override it.
+   * All three agree: less, greater, bar.
+   *
+   * Keys are listed in physical reading order, and that order is load-bearing
+   * — where two positions produce the same character the resolver points at
+   * the first one it finds.
+   *
+   * Two consequences worth knowing. `^` is a dead key on both de and es, so
+   * it has no entry there and resolves to nothing rather than to a wrong key.
+   * And on all three boards the characters the C++ and Python tracks lean on
+   * — { } [ ] \ | @ # ~ — sit on the AltGr level, which is why the resolver
+   * and the on-screen keyboard understand a third level at all.
+   */
+
+  var FR = {
+    Backquote: [null, '~'],
+    Digit1: ['&', '1'],
+    Digit2: [null, '2', '~'],
+    Digit3: ['"', '3', '#'],
+    Digit4: ["'", '4', '{'],
+    Digit5: ['(', '5', '['],
+    Digit6: ['-', '6', '|'],
+    Digit7: [null, '7', '`'],
+    Digit8: ['_', '8', '\\'],
+    Digit9: [null, '9', '^'],
+    Digit0: [null, '0', '@'],
+    Minus: [')', null, ']'],
+    Equal: ['=', '+', '}'],
+    KeyQ: ['a', 'A'],
+    KeyW: ['z', 'Z'],
+    KeyE: ['e', 'E'],
+    KeyR: ['r', 'R'],
+    KeyT: ['t', 'T'],
+    KeyY: ['y', 'Y'],
+    KeyU: ['u', 'U'],
+    KeyI: ['i', 'I'],
+    KeyO: ['o', 'O'],
+    KeyP: ['p', 'P'],
+    BracketRight: ['$', null],
+    Backslash: ['*', null],
+    KeyA: ['q', 'Q', '@'],
+    KeyS: ['s', 'S'],
+    KeyD: ['d', 'D'],
+    KeyF: ['f', 'F'],
+    KeyG: ['g', 'G'],
+    KeyH: ['h', 'H'],
+    KeyJ: ['j', 'J'],
+    KeyK: ['k', 'K'],
+    KeyL: ['l', 'L'],
+    Semicolon: ['m', 'M'],
+    Quote: [null, '%'],
+    IntlBackslash: ['<', '>', '|'],
+    KeyZ: ['w', 'W'],
+    KeyX: ['x', 'X'],
+    KeyC: ['c', 'C'],
+    KeyV: ['v', 'V'],
+    KeyB: ['b', 'B'],
+    KeyN: ['n', 'N'],
+    KeyM: [',', '?'],
+    Comma: [';', '.'],
+    Period: [':', '/'],
+    Slash: ['!', null],
+    Space: [' ', ' '],
+    Enter: ['\n', '\n']
+  };
+
+  var DE = {
+    Digit1: ['1', '!'],
+    Digit2: ['2', '"'],
+    Digit3: ['3', null],
+    Digit4: ['4', '$'],
+    Digit5: ['5', '%'],
+    Digit6: ['6', '&'],
+    Digit7: ['7', '/', '{'],
+    Digit8: ['8', '(', '['],
+    Digit9: ['9', ')', ']'],
+    Digit0: ['0', '=', '}'],
+    Minus: [null, '?', '\\'],
+    KeyQ: ['q', 'Q', '@'],
+    KeyW: ['w', 'W'],
+    KeyE: ['e', 'E'],
+    KeyR: ['r', 'R'],
+    KeyT: ['t', 'T'],
+    KeyY: ['z', 'Z'],
+    KeyU: ['u', 'U'],
+    KeyI: ['i', 'I'],
+    KeyO: ['o', 'O'],
+    KeyP: ['p', 'P'],
+    BracketRight: ['+', '*', '~'],
+    Backslash: ['#', "'"],
+    KeyA: ['a', 'A'],
+    KeyS: ['s', 'S'],
+    KeyD: ['d', 'D'],
+    KeyF: ['f', 'F'],
+    KeyG: ['g', 'G'],
+    KeyH: ['h', 'H'],
+    KeyJ: ['j', 'J'],
+    KeyK: ['k', 'K'],
+    KeyL: ['l', 'L'],
+    IntlBackslash: ['<', '>', '|'],
+    KeyZ: ['y', 'Y'],
+    KeyX: ['x', 'X'],
+    KeyC: ['c', 'C'],
+    KeyV: ['v', 'V'],
+    KeyB: ['b', 'B'],
+    KeyN: ['n', 'N'],
+    KeyM: ['m', 'M'],
+    Comma: [',', ';'],
+    Period: ['.', ':'],
+    Slash: ['-', '_'],
+    Space: [' ', ' '],
+    Enter: ['\n', '\n']
+  };
+
+  var ES = {
+    Backquote: [null, null, '\\'],
+    Digit1: ['1', '!', '|'],
+    Digit2: ['2', '"', '@'],
+    Digit3: ['3', null, '#'],
+    Digit4: ['4', '$', '~'],
+    Digit5: ['5', '%'],
+    Digit6: ['6', '&'],
+    Digit7: ['7', '/', '{'],
+    Digit8: ['8', '(', '['],
+    Digit9: ['9', ')', ']'],
+    Digit0: ['0', '=', '}'],
+    Minus: ["'", '?', '\\'],
+    KeyQ: ['q', 'Q', '@'],
+    KeyW: ['w', 'W'],
+    KeyE: ['e', 'E'],
+    KeyR: ['r', 'R'],
+    KeyT: ['t', 'T'],
+    KeyY: ['y', 'Y'],
+    KeyU: ['u', 'U'],
+    KeyI: ['i', 'I'],
+    KeyO: ['o', 'O'],
+    KeyP: ['p', 'P'],
+    BracketLeft: [null, null, '['],
+    BracketRight: ['+', '*', ']'],
+    Backslash: [null, null, '}'],
+    KeyA: ['a', 'A'],
+    KeyS: ['s', 'S'],
+    KeyD: ['d', 'D'],
+    KeyF: ['f', 'F'],
+    KeyG: ['g', 'G'],
+    KeyH: ['h', 'H'],
+    KeyJ: ['j', 'J'],
+    KeyK: ['k', 'K'],
+    KeyL: ['l', 'L'],
+    Quote: [null, null, '{'],
+    IntlBackslash: ['<', '>', '|'],
+    KeyZ: ['z', 'Z'],
+    KeyX: ['x', 'X'],
+    KeyC: ['c', 'C'],
+    KeyV: ['v', 'V'],
+    KeyB: ['b', 'B'],
+    KeyN: ['n', 'N'],
+    KeyM: ['m', 'M'],
+    Comma: [',', ';'],
+    Period: ['.', ':'],
+    Slash: ['-', '_'],
+    Space: [' ', ' '],
+    Enter: ['\n', '\n']
+  };
+
+  /**
+   * Where a layout reaches the same character from more than one key, the
+   * layout's OWN xkb section outranks what it inherits from the shared
+   * `latin` base.
+   *
+   * Spanish is the case in point. symbols/es defines [ ] { } itself, on the
+   * four keys right of P and L — which is where a physical Spanish board
+   * prints them. AltGr+7/8/9/0 reaches the same four characters, but only
+   * because es includes latin(type4). Both are real under X11; the printed
+   * one is the one worth teaching, because it is the one the learner can see.
+   *
+   * fr and de need no entry here: their duplicates are all native to their
+   * own sections, and the resolver already prefers the easier level.
+   */
+  var ES_PREFER = {
+    '[': 'BracketLeft',    // <AD11>, es section, AltGr level
+    ']': 'BracketRight',   // <AD12>, es section, AltGr level
+    '{': 'Quote',          // <AC11>, es section, AltGr level
+    '}': 'Backslash'       // <BKSL>, es section, AltGr level
+  };
+
   var LAYOUTS = [
     { id: 'us', name: 'US QWERTY', table: US },
     { id: 'uk', name: 'UK QWERTY', table: UK },
+    { id: 'fr', name: 'French AZERTY', table: FR },
+    { id: 'de', name: 'German QWERTZ', table: DE },
+    { id: 'es', name: 'Spanish QWERTY', table: ES, prefer: ES_PREFER },
     {
       id: 'auto', name: 'Detect automatically', table: null,
       note: 'Reads the layout from the browser where it can, and otherwise ' +
-            'learns it as you type. Use this for AZERTY, QWERTZ, and anything ' +
-            'else not listed.'
+            'learns it as you type. Use this for anything not listed above.'
     }
   ];
 
@@ -198,7 +405,33 @@
             index[pair[1]] = { code: code, level: 'shift' };
           }
         });
+        // AltGr gets its own pass so that it only ever fills gaps. A
+        // character some key produces plain or shifted must never be taught
+        // as an AltGr press just because that key is written down first.
+        Object.keys(table).forEach(function (code) {
+          var pair = table[code];
+          if (!pair || !pair[2]) return;
+          if (index[pair[2]] === undefined) {
+            index[pair[2]] = { code: code, level: 'altgr' };
+          }
+        });
       });
+      // Curated preferences sit between the table scan and observation:
+      // stronger than whatever order the table happens to be written in,
+      // weaker than evidence from the learner's actual keyboard.
+      var prefer = layoutMeta(layoutId).prefer;
+      if (prefer) {
+        Object.keys(prefer).forEach(function (ch) {
+          var code = prefer[ch];
+          var pair = base && base[code];
+          if (!pair) return;
+          var level = pair[0] === ch ? 'base'
+                    : pair[1] === ch ? 'shift'
+                    : pair[2] === ch ? 'altgr' : null;
+          if (level) index[ch] = { code: code, level: level };
+        });
+      }
+
       // Observations override outright, not just fill gaps.
       Object.keys(learned).forEach(function (code) {
         var pair = learned[code];
@@ -242,6 +475,16 @@
         // mislabels the keycap.
         if (slot === 0 && base && base[code]) {
           if (key === base[code][1] && key !== base[code][0]) slot = 1;
+        }
+
+        // The same trap one level up. `code` and `key` alone cannot tell an
+        // AltGr press from an unmodified one, so a character the table calls
+        // this key's AltGr form is no evidence about its base form. Writing
+        // it into slot 0 would relabel the keycap and quietly demote a
+        // correct altgr entry to base, which is exactly the wrong answer.
+        if (slot === 0 && base && base[code] && base[code][2] === key &&
+            key !== base[code][0] && key !== base[code][1]) {
+          return false;
         }
         if (slot === 0 && key.toLowerCase() !== key.toUpperCase() &&
             key === key.toUpperCase()) {
@@ -320,6 +563,9 @@
     LAYOUTS: LAYOUTS,
     US: US,
     UK: UK,
+    FR: FR,
+    DE: DE,
+    ES: ES,
     layoutMeta: layoutMeta,
     createResolver: createResolver,
     readBrowserLayout: readBrowserLayout,

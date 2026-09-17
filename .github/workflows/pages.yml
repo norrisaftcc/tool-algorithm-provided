@@ -1,0 +1,58 @@
+name: pages
+
+# Publishes toys/typing-tutor as the site root, so the tutor lives at the
+# repository's Pages URL directly rather than three directories down. The toy
+# uses only relative paths and hash routing, so it works unchanged at whatever
+# base path Pages serves it from.
+#
+# If more toys are added later, change `path` below to `toys` and give that
+# directory an index.html — Pages serves no directory listing, so a folder
+# without one is a 404.
+#
+# PREREQUISITE: Pages requires either a public repository or a paid plan
+# (Pro/Team/Enterprise). On a free account with a private repository the
+# configure-pages step below fails with GitHub's own error explaining exactly
+# that; it is not a fault in this workflow.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'toys/typing-tutor/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a deployment in progress: a half-published site is worse than
+# a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # enablement: true turns Pages on and sets its source to GitHub Actions
+      # without anyone visiting the settings screen. It needs the pages: write
+      # permission above; if org policy forbids it, this step fails loudly
+      # rather than deploying somewhere unexpected.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: toys/typing-tutor
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

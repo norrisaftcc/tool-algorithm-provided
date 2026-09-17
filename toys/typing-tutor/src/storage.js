@@ -14,7 +14,7 @@
   var KEY = 'tt:progress';
   var FUTURE_KEY = 'tt:progress.future';
   var CORRUPT_PREFIX = 'tt:progress.corrupt.';
-  var CURRENT_VERSION = 1;
+  var CURRENT_VERSION = 2;
 
   /* --- defaults and shape validation -------------------------------------- */
 
@@ -29,7 +29,11 @@
       sound: false,
       announceErrors: false,
       showKeyboard: true,
-      observedLayout: null     // code -> [base, shifted], learned by watching
+      // layoutId -> { code: [base, shifted, altgr] }, learned by watching.
+      // Keyed by layout on purpose: what a US board does says nothing about
+      // an AZERTY one, and a single shared map would let stale observations
+      // from one layout override the shipped table of another.
+      observedLayouts: {}
     };
   }
 
@@ -93,7 +97,12 @@
     d.sound = bool(s.sound, d.sound);
     d.announceErrors = bool(s.announceErrors, d.announceErrors);
     d.showKeyboard = bool(s.showKeyboard, d.showKeyboard);
-    d.observedLayout = isObj(s.observedLayout) ? s.observedLayout : null;
+    d.observedLayouts = {};
+    if (isObj(s.observedLayouts)) {
+      Object.keys(s.observedLayouts).forEach(function (id) {
+        if (isObj(s.observedLayouts[id])) d.observedLayouts[id] = s.observedLayouts[id];
+      });
+    }
 
     if (isObj(raw.lessons)) {
       Object.keys(raw.lessons).forEach(function (id) {
@@ -137,6 +146,21 @@
    */
 
   var MIGRATIONS = {
+    // v1 kept one global observation map, which let a US session's
+    // observations override the fr/de/es tables outright. File it under the
+    // layout it was actually collected on and leave the others clean.
+    1: function (obj) {
+      var settings = isObj(obj.settings) ? obj.settings : {};
+      var flat = isObj(settings.observedLayout) ? settings.observedLayout : null;
+      var scoped = {};
+      if (flat) scoped[typeof settings.layoutId === 'string' ? settings.layoutId : 'us'] = flat;
+      settings.observedLayouts = scoped;
+      delete settings.observedLayout;
+      obj.settings = settings;
+      obj.version = 2;
+      return obj;
+    },
+
     // v0 (pre-release) stored lessons as a flat id -> bestWpm map.
     0: function (obj) {
       var lessons = {};

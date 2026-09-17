@@ -66,11 +66,11 @@ function seed() {
     };
   });
   localStorage.setItem('tt:progress', JSON.stringify({
-    version: 1, updatedAt: 1, lessons,
+    version: 2, updatedAt: 1, lessons,
     settings: {
       themeId: 'algocratic', layoutId: 'us', autoIndent: true, requireEnter: true,
       reduceMotion: null, fontScale: 1, sound: false, announceErrors: false,
-      showKeyboard: true, observedLayout: null
+      showKeyboard: true, observedLayouts: {}
     },
     keyStats: { ';': { hit: 120, miss: 41 }, '{': { hit: 60, miss: 17 } },
     confusions: {}, totals: { sessions: 24, charsTyped: 18320, activeMs: 2210000 }
